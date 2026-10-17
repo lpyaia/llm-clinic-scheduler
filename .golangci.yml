@@ -1,0 +1,10 @@
+version: "2"
+
+linters:
+  enable:
+    - wsl_v5
+
+  settings:
+    wsl_v5:
+      default: default
+      cuddle-max-statements: 2
