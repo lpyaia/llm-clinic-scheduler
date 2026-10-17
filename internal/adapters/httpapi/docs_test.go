@@ -8,11 +8,12 @@ import (
 	"testing"
 
 	"github.com/lpyaia/llm-clinic-scheduler/api"
+	"github.com/lpyaia/llm-clinic-scheduler/internal/timeouts"
 )
 
 func TestDocumentationIsPublicAndUsesEmbeddedContract(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	app := New(nil, nil, logger)
+	app := New(nil, nil, logger, timeouts.DefaultHTTP)
 
 	for _, test := range []struct {
 		path        string

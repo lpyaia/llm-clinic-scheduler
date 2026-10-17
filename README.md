@@ -30,6 +30,8 @@ Configuração por variáveis de ambiente; [.env.example](.env.example) document
 $env:DATABASE_URL = 'postgres://clinic:clinic@localhost:5432/clinic?sslmode=disable'
 $env:HTTP_ADDR = '127.0.0.1:3000'
 $env:CLINIC_TIMEZONE = 'America/Sao_Paulo'
+$env:HTTP_REQUEST_TIMEOUT = '10s'
+$env:COMMAND_TIMEOUT = '2m'
 ```
 
 Para executar também a API em container:
@@ -68,6 +70,12 @@ Abra **Run and Debug** (`Ctrl+Shift+D`), selecione **Go: serve**, **Go: migrate*
 No primeiro uso, execute **Go: migrate**, depois **Go: seed** e finalmente **Go: serve**. Os comandos `migrate` e `seed` encerram ao concluir. Para investigar esses comandos desde o início, coloque um breakpoint em `run`, no arquivo `cmd/clinic/main.go`; as migrations SQL são executadas pelo goose, sem breakpoints dentro do SQL.
 
 Se a API já estiver executando no Docker, use `docker compose stop api` antes de depurar `serve`, para liberar a porta 3000. O banco pode continuar em execução. Para mudar conexão, endereço ou fuso durante o debug, edite `.env`.
+
+Os três perfis definem `HTTP_REQUEST_TIMEOUT=0s` e `COMMAND_TIMEOUT=0s`, sobrescrevendo o `.env` apenas na sessão de debug. Assim, breakpoints longos não esgotam os deadlines impostos pela aplicação. Reinicie a sessão de debug após alterar essas configurações; um contexto já expirado não é recuperado.
+
+Fora desses perfis, os padrões continuam sendo dez segundos por requisição HTTP e dois minutos para `migrate`, `seed` e `complete-due`. As variáveis aceitam durações como `30s` e `5m`; `0s` remove o deadline próprio, preservando cancelamento e eventuais deadlines do contexto pai. Valores negativos ou inválidos são rejeitados na inicialização. O timeout de comandos só é criado para os comandos de manutenção, sem um timer adicional durante `serve`.
+
+O debugger não pausa o relógio do sistema: ações pendentes ainda expiram em dez minutos e sessões em 24 horas. Timeouts do cliente HTTP ou do PostgreSQL também são independentes dessas configurações. O limite de dez segundos para encerramento gracioso do servidor continua ativo.
 
 ## Swagger UI
 
@@ -143,7 +151,7 @@ internal/domain                     entidades, estados e regras puras
 internal/infrastructure/postgres     GORM, modelos, migrations e manutenção
 ```
 
-`fiber.Ctx`, modelos GORM e `*gorm.DB` não atravessam as fronteiras do domínio e da aplicação. Os handlers recebem um contexto padrão com timeout de dez segundos. O relógio é injetado para testar datas e expiração.
+`fiber.Ctx`, modelos GORM e `*gorm.DB` não atravessam as fronteiras do domínio e da aplicação. Os handlers recebem um contexto com timeout configurável, de dez segundos por padrão e desabilitado nos perfis de debug. O relógio é injetado para testar datas e expiração.
 
 Os IDs de entidades e os parâmetros dos casos de uso e repositórios utilizam `uuid.UUID`. Strings recebidas por HTTP são convertidas e validadas no adapter antes de chegar à aplicação; UUIDs obrigatórios não podem ser `uuid.Nil`. No JSON, os IDs continuam sendo strings. Na persistência, IDs opcionais de ações usam `*uuid.UUID` para representar `NULL`; na resposta, campos ausentes continuam omitidos. As colunas já eram `uuid`, portanto essa mudança de tipos Go não exige uma migration de banco.
 

@@ -14,6 +14,7 @@ import (
 	"github.com/lpyaia/llm-clinic-scheduler/internal/adapters/httpapi"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/application"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/infrastructure/postgres"
+	"github.com/lpyaia/llm-clinic-scheduler/internal/timeouts"
 )
 
 func env(key, fallback string) string {
@@ -40,6 +41,11 @@ func run(logger *slog.Logger) error {
 		return fmt.Errorf("use: clinic [serve|migrate|seed|complete-due]")
 	}
 
+	timeoutConfig, err := timeouts.Load()
+	if err != nil {
+		return err
+	}
+
 	loc, err := time.LoadLocation(env("CLINIC_TIMEZONE", "America/Sao_Paulo"))
 	if err != nil {
 		return err
@@ -55,28 +61,30 @@ func run(logger *slog.Logger) error {
 		}
 	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
+	signalCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-	switch command {
-	case "migrate":
-		return store.Migrate(ctx)
-	case "seed":
-		return store.Seed(ctx, time.Now(), loc)
-	case "complete-due":
-		count, err := store.CompleteDue(ctx, time.Now())
-		if err == nil {
-			logger.Info("appointments_completed", "count", count)
+	if command != "serve" {
+		ctx, cancel := timeouts.Context(signalCtx, timeoutConfig.Command)
+		defer cancel()
+
+		switch command {
+		case "migrate":
+			return store.Migrate(ctx)
+		case "seed":
+			return store.Seed(ctx, time.Now(), loc)
+		case "complete-due":
+			count, err := store.CompleteDue(ctx, time.Now())
+			if err == nil {
+				logger.Info("appointments_completed", "count", count)
+			}
+
+			return err
 		}
-
-		return err
 	}
 
 	service := &application.Service{Repo: store, Clock: application.SystemClock{}, Location: loc}
-	app := httpapi.New(service, store.Ping, logger)
-
-	signalCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
+	app := httpapi.New(service, store.Ping, logger, timeoutConfig.HTTPRequest)
 
 	stopped := make(chan struct{})
 
