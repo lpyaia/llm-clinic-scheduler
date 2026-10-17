@@ -1,0 +1,376 @@
+openapi: 3.0.3
+info:
+  title: Clinic Scheduler
+  version: 1.0.0
+  description: >-
+    Backend determinístico local. Mutações exigem preparação e confirmação.
+    Datas usam RFC 3339; intervalos são [from,to). Fuso padrão America/Sao_Paulo.
+servers:
+  - url: /
+    description: Mesma origem da documentação e do contrato.
+security:
+  - bearerSession: []
+paths:
+  /health/live:
+    get:
+      operationId: liveness
+      summary: Verificar processo
+      security: []
+      responses:
+        '200':
+          description: Processo ativo.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+  /health/ready:
+    get:
+      operationId: readiness
+      summary: Verificar conexão com o banco
+      security: []
+      responses:
+        '200':
+          description: Conexão com PostgreSQL disponível.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+        '503': { $ref: '#/components/responses/Error' }
+  /v1/dev/sessions:
+    post:
+      operationId: startDevelopmentSession
+      summary: Identificar paciente e emitir sessão local
+      security: []
+      description: >-
+        Identifica paciente por telefone ou cadastra com nome completo. Não verifica
+        posse do telefone. Uso local de desenvolvimento. Sessão válida por 24 horas.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [phone]
+              properties:
+                phone:
+                  type: string
+                  pattern: '^\+[1-9][0-9]{7,14}$'
+                  example: '+5511999999999'
+                full_name:
+                  type: string
+                  maxLength: 200
+                  description: Obrigatório no cadastro; ignorado para paciente existente.
+                  example: Maria Souza
+      responses:
+        '201':
+          description: Sessão emitida.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/specialties:
+    get:
+      operationId: listSpecialties
+      summary: Listar especialidades
+      responses:
+        '200':
+          description: Especialidades ordenadas por nome.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Specialty' }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/doctors:
+    get:
+      operationId: listDoctors
+      summary: Listar médicos
+      parameters:
+        - $ref: '#/components/parameters/SpecialtyID'
+      responses:
+        '200':
+          description: Médicos ordenados por nome.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Doctor' }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/slots:
+    get:
+      operationId: findAvailableSlots
+      summary: Buscar horários disponíveis
+      description: >-
+        Exige doctor_id ou specialty_id. Ambos juntos aplicam interseção. Sem to,
+        busca duas semanas e amplia uma semana por tentativa até oito, parando ao
+        encontrar resultados. Com to, não amplia. From passado é ajustado para agora.
+        Apenas slots futuros e livres, em ordem cronológica. Sem paginação nesta fase.
+      parameters:
+        - name: doctor_id
+          in: query
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/SpecialtyID'
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - name: period
+          in: query
+          description: morning [06h,12h), afternoon [12h,18h), evening [18h,24h).
+          schema: { type: string, enum: [morning, afternoon, evening] }
+      responses:
+        '200':
+          description: Disponibilidade e intervalo pesquisado, limitado a oito semanas.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Availability' }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/appointments:
+    get:
+      operationId: listAppointments
+      summary: Listar agendamentos próprios
+      description: Lista somente os agendamentos do paciente da sessão, em ordem cronológica.
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/AppointmentStatus' }
+      responses:
+        '200':
+          description: Agendamentos próprios, incluindo histórico quando não há filtros.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Appointment' }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/pending-actions:
+    post:
+      operationId: prepareAction
+      summary: Preparar operação para confirmação
+      description: >-
+        Valida regras e ownership sem reservar o slot. Ação válida por dez minutos.
+        Apresente summary ao paciente e só confirme após sua confirmação explícita.
+        Remarcação preserva médico e categoria. Cancelamento e remarcação exigem
+        agendamento scheduled ainda não iniciado.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/PrepareCreate'
+                - $ref: '#/components/schemas/PrepareReschedule'
+                - $ref: '#/components/schemas/PrepareCancel'
+              discriminator:
+                propertyName: operation
+                mapping:
+                  create_appointment: '#/components/schemas/PrepareCreate'
+                  reschedule_appointment: '#/components/schemas/PrepareReschedule'
+                  cancel_appointment: '#/components/schemas/PrepareCancel'
+      responses:
+        '201':
+          description: Ação pendente criada; nenhum agendamento foi alterado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PendingAction' }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/pending-actions/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ActionID'
+    get:
+      operationId: getPendingAction
+      summary: Consultar ação própria e seu resultado
+      description: >-
+        Consulta somente ações próprias. Uma ação pending pode ter expires_at no
+        passado; sua confirmação retornará ACTION_EXPIRED e persistirá a falha.
+      responses:
+        '200':
+          description: Operação, resumo e resultado persistido quando concluído.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PendingAction' }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/pending-actions/{id}/confirm:
+    parameters:
+      - $ref: '#/components/parameters/ActionID'
+    post:
+      operationId: confirmAction
+      summary: Confirmar e executar operação
+      description: >-
+        Revalida e executa atomicamente os parâmetros armazenados. Aceita corpo vazio
+        ou objeto vazio, sem alterações de parâmetros. Repetir ação concluída retorna
+        o resultado original. Conflitos de negócio tornam a ação failed e exigem nova
+        preparação; erros transitórios fazem rollback e permitem nova tentativa.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+      responses:
+        '200':
+          description: Resultado original da operação confirmada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Appointment' }
+        default: { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    bearerSession:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: Token opaco de 64 caracteres emitido por /v1/dev/sessions.
+  parameters:
+    ActionID:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    SpecialtyID:
+      name: specialty_id
+      in: query
+      schema: { type: string, format: uuid }
+    From:
+      name: from
+      in: query
+      description: Início inclusivo em RFC 3339.
+      schema: { type: string, format: date-time }
+    To:
+      name: to
+      in: query
+      description: Fim exclusivo em RFC 3339. Na disponibilidade, no máximo oito semanas após o início efetivo.
+      schema: { type: string, format: date-time }
+  responses:
+    Error:
+      description: >-
+        INVALID_INPUT (400), UNAUTHORIZED (401), NOT_FOUND (404),
+        METHOD_NOT_ALLOWED (405), SLOT_UNAVAILABLE / WEEKLY_LIMIT_REACHED /
+        APPOINTMENT_CHANGED / APPOINTMENT_NOT_MUTABLE (409), ACTION_EXPIRED (410),
+        corpo excessivo (413), INTERNAL_ERROR (500) ou NOT_READY (503).
+        Recursos alheios são tratados como inexistentes.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [ok] }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code: { type: string, example: SLOT_UNAVAILABLE }
+            message: { type: string, example: Este horário não está mais disponível. }
+            request_id: { type: string, format: uuid }
+    Patient:
+      type: object
+      required: [id, full_name, phone]
+      properties:
+        id: { type: string, format: uuid }
+        full_name: { type: string }
+        phone: { type: string }
+    Session:
+      type: object
+      required: [token, expires_at, patient, identity_verified]
+      properties:
+        token: { type: string, minLength: 64, maxLength: 64 }
+        expires_at: { type: string, format: date-time }
+        patient: { $ref: '#/components/schemas/Patient' }
+        identity_verified: { type: boolean, enum: [false] }
+    Specialty:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+    Doctor:
+      type: object
+      required: [id, name, specialty_id]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        specialty_id: { type: string, format: uuid }
+    Slot:
+      type: object
+      required: [id, doctor_id, doctor_name, starts_at, duration_minutes]
+      properties:
+        id: { type: string, format: uuid }
+        doctor_id: { type: string, format: uuid }
+        doctor_name: { type: string }
+        starts_at: { type: string, format: date-time }
+        duration_minutes: { type: integer, enum: [30] }
+    Availability:
+      type: object
+      required: [slots, searched_from, searched_until, expanded]
+      properties:
+        slots:
+          type: array
+          items: { $ref: '#/components/schemas/Slot' }
+        searched_from: { type: string, format: date-time }
+        searched_until: { type: string, format: date-time }
+        expanded: { type: boolean }
+    Category:
+      type: string
+      enum: [consultation, exam, procedure]
+    AppointmentStatus:
+      type: string
+      enum: [scheduled, cancelled, completed]
+    Appointment:
+      type: object
+      required: [id, patient_id, slot_id, doctor_id, doctor_name, category, status, starts_at, duration_minutes, version]
+      properties:
+        id: { type: string, format: uuid }
+        patient_id: { type: string, format: uuid }
+        slot_id: { type: string, format: uuid }
+        doctor_id: { type: string, format: uuid }
+        doctor_name: { type: string }
+        category: { $ref: '#/components/schemas/Category' }
+        status: { $ref: '#/components/schemas/AppointmentStatus' }
+        starts_at: { type: string, format: date-time }
+        duration_minutes: { type: integer, enum: [30] }
+        version: { type: integer, minimum: 1 }
+    PrepareCreate:
+      type: object
+      additionalProperties: false
+      required: [operation, slot_id, category]
+      properties:
+        operation: { type: string, enum: [create_appointment] }
+        slot_id: { type: string, format: uuid }
+        category: { $ref: '#/components/schemas/Category' }
+    PrepareReschedule:
+      type: object
+      additionalProperties: false
+      required: [operation, appointment_id, slot_id]
+      properties:
+        operation: { type: string, enum: [reschedule_appointment] }
+        appointment_id: { type: string, format: uuid }
+        slot_id: { type: string, format: uuid }
+    PrepareCancel:
+      type: object
+      additionalProperties: false
+      required: [operation, appointment_id]
+      properties:
+        operation: { type: string, enum: [cancel_appointment] }
+        appointment_id: { type: string, format: uuid }
+    PendingAction:
+      type: object
+      required: [id, operation, status, summary, created_at, expires_at]
+      properties:
+        id: { type: string, format: uuid }
+        operation: { type: string, enum: [create_appointment, reschedule_appointment, cancel_appointment] }
+        slot_id: { type: string, format: uuid }
+        appointment_id: { type: string, format: uuid }
+        category: { $ref: '#/components/schemas/Category' }
+        status: { type: string, enum: [pending, succeeded, failed] }
+        summary: { type: string, example: 'Agendar atendimento com Dra. Ana Silva em 20/10/2026 às 14:00?' }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        failure_code: { type: string }
+        result: { $ref: '#/components/schemas/Appointment' }
