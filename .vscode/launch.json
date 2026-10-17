@@ -1,0 +1,53 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Go: serve",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "debugAdapter": "dlv-dap",
+      "program": "${workspaceFolder}/cmd/clinic",
+      "cwd": "${workspaceFolder}",
+      "args": ["serve"],
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "HTTP_REQUEST_TIMEOUT": "0s",
+        "COMMAND_TIMEOUT": "0s"
+      },
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Go: migrate",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "debugAdapter": "dlv-dap",
+      "program": "${workspaceFolder}/cmd/clinic",
+      "cwd": "${workspaceFolder}",
+      "args": ["migrate"],
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "HTTP_REQUEST_TIMEOUT": "0s",
+        "COMMAND_TIMEOUT": "0s"
+      },
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Go: seed",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "debugAdapter": "dlv-dap",
+      "program": "${workspaceFolder}/cmd/clinic",
+      "cwd": "${workspaceFolder}",
+      "args": ["seed"],
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "HTTP_REQUEST_TIMEOUT": "0s",
+        "COMMAND_TIMEOUT": "0s"
+      },
+      "console": "integratedTerminal"
+    }
+  ]
+}
