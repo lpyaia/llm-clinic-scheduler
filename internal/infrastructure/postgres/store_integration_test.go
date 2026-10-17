@@ -21,6 +21,7 @@ import (
 	"github.com/lpyaia/llm-clinic-scheduler/internal/adapters/httpapi"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/application"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/domain"
+	"github.com/lpyaia/llm-clinic-scheduler/internal/timeouts"
 )
 
 type testClock struct{ now time.Time }
@@ -472,7 +473,7 @@ func TestHTTPFullLifecycle(t *testing.T) {
 	f := setup(t)
 	slot := f.slot(1, 14)
 	next := f.slot(2, 14)
-	app := httpapi.New(f.service, f.store.Ping, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	app := httpapi.New(f.service, f.store.Ping, slog.New(slog.NewTextHandler(io.Discard, nil)), timeouts.DefaultHTTP)
 	token := ""
 	request := func(method, path, body string, status int) map[string]any {
 		t.Helper()

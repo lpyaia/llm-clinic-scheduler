@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/application"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/domain"
+	"github.com/lpyaia/llm-clinic-scheduler/internal/timeouts"
 )
 
 type uuidRepository struct {
@@ -36,7 +37,7 @@ func TestHTTPConvertsUUIDFiltersAndPreservesJSONStringIDs(t *testing.T) {
 	doctorID, specialtyID := uuid.New(), uuid.New()
 	r := &uuidRepository{slot: domain.Slot{ID: uuid.New(), DoctorID: doctorID, StartsAt: clock{}.Now().Add(time.Hour)}}
 	service := &application.Service{Repo: r, Clock: clock{}, Location: time.UTC}
-	app := New(service, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	app := New(service, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), timeouts.DefaultHTTP)
 	req := httptest.NewRequest("GET", "/v1/slots?doctor_id="+strings.ToUpper(doctorID.String())+"&specialty_id="+specialtyID.String(), nil)
 	req.Header.Set("Authorization", "Bearer "+strings.Repeat("a", 64))
 
@@ -82,7 +83,7 @@ func TestHTTPActionOmitsAbsentUUIDs(t *testing.T) {
 			action := domain.Action{ID: uuid.New(), Operation: test.operation, SlotID: test.slotID, AppointmentID: test.appointmentID, Status: domain.Pending}
 			r := &uuidRepository{action: action}
 			service := &application.Service{Repo: r, Clock: clock{}, Location: time.UTC}
-			app := New(service, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+			app := New(service, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), timeouts.DefaultHTTP)
 			req := httptest.NewRequest("GET", "/v1/pending-actions/"+action.ID.String(), nil)
 			req.Header.Set("Authorization", "Bearer "+strings.Repeat("a", 64))
 

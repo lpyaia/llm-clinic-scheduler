@@ -11,6 +11,10 @@
       "cwd": "${workspaceFolder}",
       "args": ["serve"],
       "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "HTTP_REQUEST_TIMEOUT": "0s",
+        "COMMAND_TIMEOUT": "0s"
+      },
       "console": "integratedTerminal"
     },
     {
@@ -23,6 +27,10 @@
       "cwd": "${workspaceFolder}",
       "args": ["migrate"],
       "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "HTTP_REQUEST_TIMEOUT": "0s",
+        "COMMAND_TIMEOUT": "0s"
+      },
       "console": "integratedTerminal"
     },
     {
@@ -35,6 +43,10 @@
       "cwd": "${workspaceFolder}",
       "args": ["seed"],
       "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "HTTP_REQUEST_TIMEOUT": "0s",
+        "COMMAND_TIMEOUT": "0s"
+      },
       "console": "integratedTerminal"
     }
   ]

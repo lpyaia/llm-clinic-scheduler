@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/application"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/domain"
+	"github.com/lpyaia/llm-clinic-scheduler/internal/timeouts"
 )
 
 type localKey int
@@ -58,7 +59,7 @@ func errorStatus(err error) (int, string, string) {
 	return 500, "INTERNAL_ERROR", "Não foi possível concluir a operação. Tente novamente."
 }
 
-func New(service *application.Service, ping func(context.Context) error, logger *slog.Logger) *fiber.App {
+func New(service *application.Service, ping func(context.Context) error, logger *slog.Logger, requestTimeout time.Duration) *fiber.App {
 	app := fiber.New(fiber.Config{Immutable: true, BodyLimit: 64 * 1024, ErrorHandler: func(c fiber.Ctx, err error) error {
 		status, code, message := errorStatus(err)
 		id, _ := c.Locals(requestIDKey).(string)
@@ -70,7 +71,7 @@ func New(service *application.Service, ping func(context.Context) error, logger 
 		c.Locals(requestIDKey, id)
 		c.Set("X-Request-ID", id)
 
-		ctx, cancel := context.WithTimeout(c.Context(), 10*time.Second)
+		ctx, cancel := timeouts.Context(c.Context(), requestTimeout)
 		defer cancel()
 
 		c.SetContext(ctx)
