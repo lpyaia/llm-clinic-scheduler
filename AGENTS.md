@@ -15,7 +15,7 @@ Do not compress an entire function into one continuous block just because gofmt 
 
 After finishing your implementation, run `golangci-lint run --fix` to automatically update formatting.
 
-## Version controlling
+## Version control
 
 When you finish an implementation, or if you get asked, you should commit all the changes you've made. If there's no branch created, create one.
 For conventions purpose, the branch name should follow this pattern: <feat|fix|perf|refactor>/<brief-and-meaningful-description-of-the-change>.
