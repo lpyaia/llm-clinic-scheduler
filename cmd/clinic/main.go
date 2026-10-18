@@ -13,6 +13,7 @@ import (
 
 	"github.com/lpyaia/llm-clinic-scheduler/internal/adapters/httpapi"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/application"
+	"github.com/lpyaia/llm-clinic-scheduler/internal/config"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/infrastructure/postgres"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/timeouts"
 )
@@ -39,6 +40,10 @@ func run(logger *slog.Logger) error {
 
 	if command != "serve" && command != "migrate" && command != "seed" && command != "complete-due" {
 		return fmt.Errorf("use: clinic [serve|migrate|seed|complete-due]")
+	}
+
+	if err := config.LoadEnv(); err != nil {
+		return err
 	}
 
 	timeoutConfig, err := timeouts.Load()
