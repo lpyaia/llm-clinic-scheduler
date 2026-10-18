@@ -16,6 +16,8 @@ O backend protege disponibilidade, autorização, limite semanal e concorrência
 Pré-requisitos: Go 1.27+, Docker Desktop com engine Linux ativo e Docker Compose.
 
 ```powershell
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+
 docker compose up -d --wait db
 go run ./cmd/clinic migrate
 go run ./cmd/clinic seed
@@ -24,15 +26,18 @@ go run ./cmd/clinic serve
 
 A API escuta em `http://127.0.0.1:3000`. `migrate` aplica migrations pendentes; `seed` adiciona dois médicos e slots de dias úteis nas próximas oito semanas, sem duplicar dados em execuções repetidas.
 
-Configuração por variáveis de ambiente; [.env.example](.env.example) documenta os valores padrão. O executável Go não carrega `.env` automaticamente. Exemplo:
+O executável carrega automaticamente a `.env` da raiz antes de ler a configuração, inclusive ao executar de um subdiretório do repositório. Use [.env.example](.env.example) como modelo e edite a `.env` local:
 
-```powershell
-$env:DATABASE_URL = 'postgres://clinic:clinic@localhost:5432/clinic?sslmode=disable'
-$env:HTTP_ADDR = '127.0.0.1:3000'
-$env:CLINIC_TIMEZONE = 'America/Sao_Paulo'
-$env:HTTP_REQUEST_TIMEOUT = '10s'
-$env:COMMAND_TIMEOUT = '2m'
+```dotenv
+DATABASE_URL=postgres://clinic:clinic@localhost:5432/clinic?sslmode=disable
+TEST_DATABASE_URL=postgres://clinic:clinic@localhost:5433/clinic_test?sslmode=disable
+HTTP_ADDR=127.0.0.1:3000
+CLINIC_TIMEZONE=America/Sao_Paulo
+HTTP_REQUEST_TIMEOUT=10s
+COMMAND_TIMEOUT=2m
 ```
+
+Variáveis já definidas no processo têm prioridade sobre a `.env`, preservando overrides do terminal, Docker e debugger. A aplicação também pode iniciar sem esse arquivo, usando as variáveis do ambiente e os valores padrão; os scripts de teste exigem a `.env`. Arquivos inválidos interrompem a inicialização. O arquivo não é incorporado ao binário nem à imagem Docker.
 
 Para executar também a API em container:
 
@@ -56,7 +61,7 @@ As migrations são executadas explicitamente. Não há `AutoMigrate` na iniciali
 
 ## Debugger no VS Code
 
-As configurações de [.vscode/launch.json](.vscode/launch.json) executam o pacote `cmd/clinic` com Delve e carregam as variáveis do arquivo `.env` local, ignorado pelo Git. Crie-o a partir do exemplo caso ainda não exista:
+As configurações de [.vscode/launch.json](.vscode/launch.json) executam o pacote `cmd/clinic` com Delve e carregam as variáveis do mesmo arquivo `.env` da raiz. Crie-o a partir do exemplo caso ainda não exista:
 
 ```powershell
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
@@ -163,15 +168,36 @@ Logs estruturados incluem ID da requisição, método, padrão da rota, duraçã
 
 ## Testes
 
+Os scripts PowerShell usam a mesma `.env` da raiz e podem ser chamados de qualquer diretório, pois localizam o projeto pelo caminho do próprio script. Para criar a configuração inicial:
+
+```powershell
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+
+# Testes unitários e HTTP, sem banco ou Docker.
+.\scripts\test-unit.ps1
+
+# Sobe o banco exclusivo de testes e executa também a integração.
+.\scripts\test-integration.ps1
+
+# Argumentos adicionais são repassados ao go test.
+.\scripts\test-unit.ps1 -v -run TestValidateChange
+.\scripts\test-integration.ps1 -v -run TestConcurrentSlotBooking
+```
+
+Execute com PowerShell (`pwsh -File ./scripts/test-unit.ps1` em outros sistemas). Os scripts devolvem código diferente de zero quando a execução falha. A suíte unitária inclui os testes HTTP em memória; a suíte de integração executa todos os pacotes com a tag `integration`, sem cache e com limite de 120 segundos.
+
+O serviço Compose `test-db`, habilitado pelo perfil `test`, utiliza outro container PostgreSQL, exposto na porta **5433**, com banco **clinic_test**. A aplicação continua usando `db`, na porta **5432**, com banco **clinic**. Em uma `.env` já existente, adicione `TEST_DATABASE_URL` conforme o exemplo acima. Se essa variável já estiver exportada no terminal, ela terá prioridade; remova o override para usar o valor do arquivo. Não há fallback de `TEST_DATABASE_URL` para `DATABASE_URL`, e a suíte rejeita nomes de banco iguais para evitar executar testes no banco da aplicação.
+
+Os testes de integração criam um schema exclusivo por teste no banco de testes e o removem ao terminar. Exigem permissão para criar schemas. Concorrência e restrições são verificadas no PostgreSQL real, sem substituir por SQLite. O serviço `test-db` pode ser parado com `docker compose --profile test stop test-db`; os dados dele não usam o volume `postgres_data` da aplicação. O script mantém o serviço ativo para as próximas execuções.
+
+Também é possível executar diretamente, a partir da raiz; a suíte de integração carrega a `.env` automaticamente:
+
 ```powershell
 go test ./...
 go vet ./...
-docker compose up -d --wait db
-$env:TEST_DATABASE_URL = 'postgres://clinic:clinic@localhost:5432/clinic?sslmode=disable'
+docker compose --profile test up -d --wait test-db
 go test -tags=integration ./... -count=1 -timeout=120s
 ```
-
-Os testes de integração criam um schema exclusivo por teste e removem apenas esse schema. Exigem uma URL PostgreSQL e permissão para criar schemas. A suíte sem a tag não depende de banco. Concorrência e restrições são verificadas no PostgreSQL real, sem substituir por SQLite.
 
 Cobertura funcional: disputa por slot, limite semanal concorrente, confirmação repetida e expirada, ownership, reinício, remarcação em semana cheia, rollback com falha injetada, filtros, expansão, manutenção e ciclo HTTP completo. Testes de domínio verificam também a passagem entre domingo e segunda-feira no fuso da clínica.
 
