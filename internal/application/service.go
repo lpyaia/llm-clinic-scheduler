@@ -77,7 +77,8 @@ func (s *Service) Authenticate(ctx context.Context, token string) (domain.Princi
 		return domain.Principal{}, err
 	}
 
-	if !s.Clock.Now().Before(session.ExpiresAt) {
+	now := s.Clock.Now()
+	if now.After(session.ExpiresAt) || now.Equal(session.ExpiresAt) {
 		return domain.Principal{}, domain.ErrUnauthorized
 	}
 
@@ -102,8 +103,10 @@ func (s *Service) FindSlots(ctx context.Context, input SearchInput) (SearchResul
 
 	from = from.In(s.Location)
 	maximum := from.AddDate(0, 0, 56)
-	if !input.To.IsZero() && (!input.To.After(from) || input.To.After(maximum)) {
-		return SearchResult{}, invalid("O intervalo deve ser positivo e de no máximo oito semanas.")
+	if !input.To.IsZero() {
+		if input.To.Before(from) || input.To.Equal(from) || input.To.After(maximum) {
+			return SearchResult{}, invalid("O intervalo deve ser positivo e de no máximo oito semanas.")
+		}
 	}
 
 	result := SearchResult{From: from}
@@ -136,8 +139,10 @@ func (s *Service) ListAppointments(ctx context.Context, p domain.Principal, f Ap
 		return nil, invalid("Status inválido.")
 	}
 
-	if !f.From.IsZero() && !f.To.IsZero() && !f.To.After(f.From) {
-		return nil, invalid("Intervalo inválido.")
+	if !f.From.IsZero() && !f.To.IsZero() {
+		if f.To.Before(f.From) || f.To.Equal(f.From) {
+			return nil, invalid("Intervalo inválido.")
+		}
 	}
 
 	return s.Repo.Appointments(ctx, p.PatientID, f)
@@ -248,7 +253,7 @@ func (s *Service) Confirm(ctx context.Context, p domain.Principal, id uuid.UUID)
 		}
 
 		now := s.Clock.Now()
-		if !now.Before(a.ExpiresAt) {
+		if now.Equal(a.ExpiresAt) || now.After(a.ExpiresAt) {
 			businessErr = domain.ErrActionExpired
 		} else {
 			// A savepoint rolls back a failed write before the outer transaction
@@ -335,7 +340,7 @@ func (s *Service) validate(ctx context.Context, r Repository, a domain.Action, l
 
 		if lock {
 			now = s.Clock.Now()
-			if !now.Before(a.ExpiresAt) {
+			if now.After(a.ExpiresAt) || now.Equal(a.ExpiresAt) {
 				return appointment, domain.Slot{}, domain.ErrActionExpired
 			}
 		}
@@ -360,7 +365,7 @@ func (s *Service) validate(ctx context.Context, r Repository, a domain.Action, l
 
 	if lock {
 		now = s.Clock.Now()
-		if !now.Before(a.ExpiresAt) {
+		if now.After(a.ExpiresAt) || now.Equal(a.ExpiresAt) {
 			return appointment, slot, domain.ErrActionExpired
 		}
 
@@ -371,7 +376,7 @@ func (s *Service) validate(ctx context.Context, r Repository, a domain.Action, l
 		}
 	}
 
-	if !slot.StartsAt.After(now) {
+	if slot.StartsAt.Before(now) || slot.StartsAt.Equal(now) {
 		return appointment, slot, domain.ErrSlotUnavailable
 	}
 
