@@ -92,13 +92,15 @@ func WeekBounds(t time.Time, loc *time.Location) (time.Time, time.Time) {
 
 	return start, start.AddDate(0, 0, 7)
 }
+
 func ValidateChange(a Appointment, now time.Time) error {
-	if a.Status != Scheduled || !a.StartsAt.After(now) {
+	if a.Status != Scheduled || a.StartsAt.Before(now) || a.StartsAt.Equal(now) {
 		return Failure("APPOINTMENT_NOT_MUTABLE", "Somente agendamentos futuros e ativos podem ser alterados.")
 	}
 
 	return nil
 }
+
 func PeriodBounds(period string) (int, int, error) {
 	switch period {
 	case "":

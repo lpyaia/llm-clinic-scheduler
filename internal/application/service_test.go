@@ -21,7 +21,7 @@ type searchRepo struct {
 
 func (r *searchRepo) Slots(_ context.Context, f SlotFilter) ([]domain.Slot, error) {
 	r.filters = append(r.filters, f)
-	if !r.availableAt.IsZero() && !r.availableAt.Before(f.From) && r.availableAt.Before(f.To) {
+	if !r.availableAt.IsZero() && (r.availableAt.After(f.From) || r.availableAt.Equal(f.From)) && r.availableAt.Before(f.To) {
 		return []domain.Slot{{ID: uuid.New(), StartsAt: r.availableAt}}, nil
 	}
 
