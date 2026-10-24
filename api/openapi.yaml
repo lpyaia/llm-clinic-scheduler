@@ -11,6 +11,48 @@ servers:
 security:
   - bearerSession: []
 paths:
+  /v1/agent/messages:
+    post:
+      operationId: queryAppointmentsConversationally
+      summary: Consultar agendamentos em português
+      description: >-
+        Resolve o paciente pela sessão. Cada requisição tem histórico próprio, sem
+        memória entre mensagens. O modelo chama list_appointments com filtros de
+        status e datas RFC 3339; o padrão é scheduled. A resposta em português é
+        montada pelo servidor a partir dos resultados, no fuso da clínica.
+        Limite de quatro chamadas ao modelo. Requer OPENAI_API_KEY no servidor.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [message]
+              properties:
+                message:
+                  type: string
+                  description: Mensagem não vazia, com até 4000 bytes UTF-8.
+                  example: Quais atendimentos tenho marcados?
+      responses:
+        '200':
+          description: Consulta concluída, inclusive quando não há agendamentos.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgentReply' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '502':
+          description: MODEL_INVALID_RESPONSE ou AGENT_STEP_LIMIT. Nenhuma mutação é executada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '503':
+          description: AGENT_UNAVAILABLE quando o fornecedor não está configurado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        default: { $ref: '#/components/responses/Error' }
   /health/live:
     get:
       operationId: liveness
@@ -336,6 +378,22 @@ components:
         starts_at: { type: string, format: date-time }
         duration_minutes: { type: integer, enum: [30] }
         version: { type: integer, minimum: 1 }
+    AgentReply:
+      type: object
+      required: [message, appointments]
+      properties:
+        message: { type: string }
+        appointments:
+          type: array
+          items:
+            type: object
+            required: [id, doctor_name, category, status, starts_at]
+            properties:
+              id: { type: string, format: uuid }
+              doctor_name: { type: string }
+              category: { $ref: '#/components/schemas/Category' }
+              status: { $ref: '#/components/schemas/AppointmentStatus' }
+              starts_at: { type: string, format: date-time }
     PrepareCreate:
       type: object
       additionalProperties: false

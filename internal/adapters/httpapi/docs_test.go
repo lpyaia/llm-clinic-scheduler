@@ -13,7 +13,7 @@ import (
 
 func TestDocumentationIsPublicAndUsesEmbeddedContract(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	app := New(nil, nil, logger, timeouts.DefaultHTTP)
+	app := New(nil, nil, logger, timeouts.DefaultHTTP, nil)
 
 	for _, test := range []struct {
 		path        string

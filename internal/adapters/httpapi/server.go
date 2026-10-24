@@ -13,6 +13,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/recover"
 	"github.com/google/uuid"
+	"github.com/lpyaia/llm-clinic-scheduler/internal/agent"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/application"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/domain"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/timeouts"
@@ -39,6 +40,10 @@ func errorStatus(err error) (int, string, string) {
 			status = 404
 		case "ACTION_EXPIRED":
 			status = 410
+		case "AGENT_UNAVAILABLE":
+			status = 503
+		case "MODEL_INVALID_RESPONSE", "AGENT_STEP_LIMIT":
+			status = 502
 		}
 
 		return status, business.Code, business.Message
@@ -59,7 +64,7 @@ func errorStatus(err error) (int, string, string) {
 	return 500, "INTERNAL_ERROR", "Não foi possível concluir a operação. Tente novamente."
 }
 
-func New(service *application.Service, ping func(context.Context) error, logger *slog.Logger, requestTimeout time.Duration) *fiber.App {
+func New(service *application.Service, ping func(context.Context) error, logger *slog.Logger, requestTimeout time.Duration, assistant *agent.Agent) *fiber.App {
 	app := fiber.New(fiber.Config{Immutable: true, BodyLimit: 64 * 1024, ErrorHandler: func(c fiber.Ctx, err error) error {
 		status, code, message := errorStatus(err)
 		id, _ := c.Locals(requestIDKey).(string)
@@ -127,6 +132,25 @@ func New(service *application.Service, ping func(context.Context) error, logger 
 		c.Locals(principalKey, p)
 
 		return c.Next()
+	})
+	v1.Post("/agent/messages", func(c fiber.Ctx) error {
+		var in struct {
+			Message string `json:"message"`
+		}
+		if err := decode(c, &in); err != nil {
+			return err
+		}
+
+		if assistant == nil {
+			return domain.Failure("AGENT_UNAVAILABLE", "O assistente não está configurado.")
+		}
+
+		out, err := assistant.Reply(c.Context(), principal(c), in.Message)
+		if err != nil {
+			return err
+		}
+
+		return c.JSON(out)
 	})
 	v1.Get("/specialties", func(c fiber.Ctx) error {
 		rows, err := service.ListSpecialties(c.Context())

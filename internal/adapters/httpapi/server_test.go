@@ -39,7 +39,7 @@ func (httpRepo) Action(context.Context, uuid.UUID, uuid.UUID, bool) (domain.Acti
 func TestHTTPValidationAndAuthorization(t *testing.T) {
 	s := &application.Service{Repo: httpRepo{}, Clock: clock{}, Location: time.UTC}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	app := New(s, func(context.Context) error { return nil }, logger, timeouts.DefaultHTTP)
+	app := New(s, func(context.Context) error { return nil }, logger, timeouts.DefaultHTTP, nil)
 
 	for _, test := range []struct {
 		name, method, path, body, token string
@@ -116,7 +116,7 @@ func TestHTTPValidationAndAuthorization(t *testing.T) {
 }
 func TestHTTPDoesNotExposeInfrastructureErrors(t *testing.T) {
 	s := &application.Service{Repo: httpRepo{failed: true}, Clock: clock{}, Location: time.UTC}
-	app := New(s, func(context.Context) error { return errors.New("private diagnostic") }, slog.New(slog.NewTextHandler(io.Discard, nil)), timeouts.DefaultHTTP)
+	app := New(s, func(context.Context) error { return errors.New("private diagnostic") }, slog.New(slog.NewTextHandler(io.Discard, nil)), timeouts.DefaultHTTP, nil)
 
 	for _, path := range []string{"/v1/appointments", "/health/ready"} {
 		req := httptest.NewRequest("GET", path, nil)
