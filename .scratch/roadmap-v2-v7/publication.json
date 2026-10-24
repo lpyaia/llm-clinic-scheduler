@@ -1,0 +1,335 @@
+[
+  {
+    "ticket": 1,
+    "phase": "V2",
+    "title": "V2 — Consultar agendamentos pelo agente",
+    "number": 7,
+    "database_id": 5969729564,
+    "node_id": "I_kwDOVM2JJ88AAAABY9LYHA",
+    "url": "https://github.com/lpyaia/llm-clinic-scheduler/issues/7",
+    "blocked_by": [],
+    "native_dependencies": false,
+    "project": "https://github.com/users/lpyaia/projects/1",
+    "project_added": false
+  },
+  {
+    "ticket": 2,
+    "phase": "V2",
+    "title": "V2 — Buscar horários em conversa multi-turn",
+    "number": 10,
+    "database_id": 5969732863,
+    "node_id": "I_kwDOVM2JJ88AAAABY9Lk_w",
+    "url": "https://github.com/lpyaia/llm-clinic-scheduler/issues/10",
+    "blocked_by": [
+      1
+    ],
+    "native_dependencies": true,
+    "project": "https://github.com/users/lpyaia/projects/1",
+    "project_added": false
+  },
+  {
+    "ticket": 3,
+    "phase": "V2",
+    "title": "V2 — Criar agendamento com confirmação conversacional",
+    "number": 11,
+    "database_id": 5969732995,
+    "node_id": "I_kwDOVM2JJ88AAAABY9Llgw",
+    "url": "https://github.com/lpyaia/llm-clinic-scheduler/issues/11",
+    "blocked_by": [
+      2
+    ],
+    "native_dependencies": true,
+    "project": "https://github.com/users/lpyaia/projects/1",
+    "project_added": false
+  },
+  {
+    "ticket": 4,
+    "phase": "V2",
+    "title": "V2 — Remarcar por conversa",
+    "number": 12,
+    "database_id": 5969733101,
+    "node_id": "I_kwDOVM2JJ88AAAABY9Ll7Q",
+    "url": "https://github.com/lpyaia/llm-clinic-scheduler/issues/12",
+    "blocked_by": [
+      3
+    ],
+    "native_dependencies": true,
+    "project": "https://github.com/users/lpyaia/projects/1",
+    "project_added": false
+  },
+  {
+    "ticket": 5,
+    "phase": "V2",
+    "title": "V2 — Cancelar por conversa",
+    "number": 13,
+    "database_id": 5969733246,
+    "node_id": "I_kwDOVM2JJ88AAAABY9Lmfg",
+    "url": "https://github.com/lpyaia/llm-clinic-scheduler/issues/13",
+    "blocked_by": [
+      3
+    ],
+    "native_dependencies": true,
+    "project": "https://github.com/users/lpyaia/projects/1",
+    "project_added": false
+  },
+  {
+    "ticket": 6,
+    "phase": "V2",
+    "title": "V2 — Recuperar conversas após falhas",
+    "number": 14,
+    "database_id": 5969733380,
+    "node_id": "I_kwDOVM2JJ88AAAABY9LnBA",
+    "url": "https://github.com/lpyaia/llm-clinic-scheduler/issues/14",
+    "blocked_by": [
+      4,
+      5
+    ],
+    "native_dependencies": true,
+    "project": "https://github.com/users/lpyaia/projects/1",
+    "project_added": false
+  },
+  {
+    "ticket": 7,
+    "phase": "V2",
+    "title": "V2 — Recusar aconselhamento médico e oferecer contato humano",
+    "number": 15,
+    "database_id": 5969733484,
+    "node_id": "I_kwDOVM2JJ88AAAABY9LnbA",
+    "url": "https://github.com/lpyaia/llm-clinic-scheduler/issues/15",
+    "blocked_by": [
+      1
+    ],
+    "native_dependencies": true,
+    "project": "https://github.com/users/lpyaia/projects/1",
+    "project_added": false
+  },
+  {
+    "ticket": 8,
+    "phase": "V3",
+    "title": "V3 — Investigar uma execução por trace",
+    "number": 16,
+    "database_id": 5969733608,
+    "node_id": "I_kwDOVM2JJ88AAAABY9Ln6A",
+    "url": "https://github.com/lpyaia/llm-clinic-scheduler/issues/16",
+    "blocked_by": [
+      1
+    ],
+    "native_dependencies": true,
+    "project": "https://github.com/users/lpyaia/projects/1",
+    "project_added": false
+  },
+  {
+    "ticket": 9,
+    "phase": "V3",
+    "title": "V3 — Medir latência, consumo e custo",
+    "number": 17,
+    "database_id": 5969733743,
+    "node_id": "I_kwDOVM2JJ88AAAABY9Lobw",
+    "url": "https://github.com/lpyaia/llm-clinic-scheduler/issues/17",
+    "blocked_by": [
+      8
+    ],
+    "native_dependencies": true,
+    "project": "https://github.com/users/lpyaia/projects/1",
+    "project_added": false
+  },
+  {
+    "ticket": 10,
+    "phase": "V3",
+    "title": "V3 — Executar avaliações reproduzíveis do agente",
+    "number": 18,
+    "database_id": 5969733854,
+    "node_id": "I_kwDOVM2JJ88AAAABY9Lo3g",
+    "url": "https://github.com/lpyaia/llm-clinic-scheduler/issues/18",
+    "blocked_by": [
+      1
+    ],
+    "native_dependencies": true,
+    "project": "https://github.com/users/lpyaia/projects/1",
+    "project_added": false
+  },
+  {
+    "ticket": 11,
+    "phase": "V3",
+    "title": "V3 — Cobrir os comportamentos da V2 com avaliações",
+    "number": 19,
+    "database_id": 5969733970,
+    "node_id": "I_kwDOVM2JJ88AAAABY9LpUg",
+    "url": "https://github.com/lpyaia/llm-clinic-scheduler/issues/19",
+    "blocked_by": [
+      6,
+      7,
+      10
+    ],
+    "native_dependencies": true,
+    "project": "https://github.com/users/lpyaia/projects/1",
+    "project_added": false
+  },
+  {
+    "ticket": 12,
+    "phase": "V4",
+    "title": "V4 — Ingerir e recuperar um documento da clínica",
+    "number": 20,
+    "database_id": 5969734103,
+    "node_id": "I_kwDOVM2JJ88AAAABY9Lp1w",
+    "url": "https://github.com/lpyaia/llm-clinic-scheduler/issues/20",
+    "blocked_by": [],
+    "native_dependencies": false,
+    "project": "https://github.com/users/lpyaia/projects/1",
+    "project_added": false
+  },
+  {
+    "ticket": 13,
+    "phase": "V4",
+    "title": "V4 — Responder perguntas com RAG e citações",
+    "number": 21,
+    "database_id": 5969734226,
+    "node_id": "I_kwDOVM2JJ88AAAABY9LqUg",
+    "url": "https://github.com/lpyaia/llm-clinic-scheduler/issues/21",
+    "blocked_by": [
+      1,
+      12
+    ],
+    "native_dependencies": true,
+    "project": "https://github.com/users/lpyaia/projects/1",
+    "project_added": false
+  },
+  {
+    "ticket": 14,
+    "phase": "V4",
+    "title": "V4 — Consultar o acervo operacional com filtros",
+    "number": 22,
+    "database_id": 5969734328,
+    "node_id": "I_kwDOVM2JJ88AAAABY9LquA",
+    "url": "https://github.com/lpyaia/llm-clinic-scheduler/issues/22",
+    "blocked_by": [
+      13
+    ],
+    "native_dependencies": true,
+    "project": "https://github.com/users/lpyaia/projects/1",
+    "project_added": false
+  },
+  {
+    "ticket": 15,
+    "phase": "V5",
+    "title": "V5 — Avaliar qualidade da recuperação",
+    "number": 23,
+    "database_id": 5969734444,
+    "node_id": "I_kwDOVM2JJ88AAAABY9LrLA",
+    "url": "https://github.com/lpyaia/llm-clinic-scheduler/issues/23",
+    "blocked_by": [
+      12
+    ],
+    "native_dependencies": true,
+    "project": "https://github.com/users/lpyaia/projects/1",
+    "project_added": false
+  },
+  {
+    "ticket": 16,
+    "phase": "V5",
+    "title": "V5 — Avaliar fundamentação, respostas e citações",
+    "number": 24,
+    "database_id": 5969734544,
+    "node_id": "I_kwDOVM2JJ88AAAABY9LrkA",
+    "url": "https://github.com/lpyaia/llm-clinic-scheduler/issues/24",
+    "blocked_by": [
+      10,
+      13
+    ],
+    "native_dependencies": true,
+    "project": "https://github.com/users/lpyaia/projects/1",
+    "project_added": false
+  },
+  {
+    "ticket": 17,
+    "phase": "V5",
+    "title": "V5 — Comparar estratégias de RAG",
+    "number": 25,
+    "database_id": 5969734649,
+    "node_id": "I_kwDOVM2JJ88AAAABY9Lr-Q",
+    "url": "https://github.com/lpyaia/llm-clinic-scheduler/issues/25",
+    "blocked_by": [
+      14,
+      15,
+      16
+    ],
+    "native_dependencies": true,
+    "project": "https://github.com/users/lpyaia/projects/1",
+    "project_added": false
+  },
+  {
+    "ticket": 18,
+    "phase": "V6",
+    "title": "V6 — Retomar conversas após reiniciar a aplicação",
+    "number": 26,
+    "database_id": 5969734751,
+    "node_id": "I_kwDOVM2JJ88AAAABY9LsXw",
+    "url": "https://github.com/lpyaia/llm-clinic-scheduler/issues/26",
+    "blocked_by": [
+      3
+    ],
+    "native_dependencies": true,
+    "project": "https://github.com/users/lpyaia/projects/1",
+    "project_added": false
+  },
+  {
+    "ticket": 19,
+    "phase": "V6",
+    "title": "V6 — Processar mensagens concorrentes sem perder estado",
+    "number": 27,
+    "database_id": 5969734846,
+    "node_id": "I_kwDOVM2JJ88AAAABY9Lsvg",
+    "url": "https://github.com/lpyaia/llm-clinic-scheduler/issues/27",
+    "blocked_by": [
+      18
+    ],
+    "native_dependencies": true,
+    "project": "https://github.com/users/lpyaia/projects/1",
+    "project_added": false
+  },
+  {
+    "ticket": 20,
+    "phase": "V7",
+    "title": "V7 — Conversar pelo WhatsApp com paciente conhecido",
+    "number": 28,
+    "database_id": 5969734975,
+    "node_id": "I_kwDOVM2JJ88AAAABY9LtPw",
+    "url": "https://github.com/lpyaia/llm-clinic-scheduler/issues/28",
+    "blocked_by": [
+      19
+    ],
+    "native_dependencies": true,
+    "project": "https://github.com/users/lpyaia/projects/1",
+    "project_added": false
+  },
+  {
+    "ticket": 21,
+    "phase": "V7",
+    "title": "V7 — Cadastrar paciente no primeiro contato",
+    "number": 29,
+    "database_id": 5969735106,
+    "node_id": "I_kwDOVM2JJ88AAAABY9Ltwg",
+    "url": "https://github.com/lpyaia/llm-clinic-scheduler/issues/29",
+    "blocked_by": [
+      20
+    ],
+    "native_dependencies": true,
+    "project": "https://github.com/users/lpyaia/projects/1",
+    "project_added": false
+  },
+  {
+    "ticket": 22,
+    "phase": "V7",
+    "title": "V7 — Recuperar reentregas e falhas de envio",
+    "number": 30,
+    "database_id": 5969735298,
+    "node_id": "I_kwDOVM2JJ88AAAABY9Lugg",
+    "url": "https://github.com/lpyaia/llm-clinic-scheduler/issues/30",
+    "blocked_by": [
+      20
+    ],
+    "native_dependencies": true,
+    "project": "https://github.com/users/lpyaia/projects/1",
+    "project_added": false
+  }
+]
