@@ -8,9 +8,9 @@ Os tickets foram publicados como GitHub Issues com a label `ready-for-agent`. Fo
 
 Destino configurado: [Project 1 de lpyaia](https://github.com/users/lpyaia/projects/1).
 
-A vinculação ao Project ainda está pendente. O plugin GitHub foi autenticado como `lpyaia` e a leitura da issue #7 foi confirmada, mas suas operações disponíveis não incluem GitHub Projects. A credencial Git local usada na publicação não tem o escopo `project`. O navegador integrado disponível também está sem sessão; a tentativa de acesso ao navegador externo expirou aguardando autorização.
+As 22 issues foram vinculadas ao Project pelo navegador autenticado e aparecem na coluna `Backlog`. A associação foi conferida após recarregar o quadro, verificando a contagem e os identificadores dos tickets. As dependências nativas continuam visíveis nos cartões bloqueados.
 
-O campo `project_added` no manifesto só deve ser atualizado depois da confirmação da associação de cada issue ao Project. Não foram alterados campos de status do Project.
+O campo `project_added` está confirmado para todos os tickets no manifesto. A importação usou o status `Backlog` do próprio Project; nenhuma coluna ou opção de status foi criada ou renomeada.
 
 ## Tickets
 
@@ -50,6 +50,7 @@ Uma label `ready-for-agent` não elimina os bloqueios: um ticket só pode começ
 
 - 22 issues canônicas abertas, todas com os critérios de aceite aprovados e a label `ready-for-agent`.
 - 27 arestas de bloqueio nativas conferidas pela API do GitHub.
+- 22 issues vinculadas ao Project 1 e conferidas no backlog pelo navegador autenticado.
 - Labels padrão configuradas: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human` e `wontfix`.
 - Duas cópias geradas durante a tentativa inicial de publicação foram fechadas como duplicatas: #8 de #10, e #9 de #7.
 - Nenhuma issue da V1 ou issue pai foi criada ou modificada.

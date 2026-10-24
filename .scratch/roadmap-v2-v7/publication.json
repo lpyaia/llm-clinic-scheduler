@@ -10,7 +10,7 @@
     "blocked_by": [],
     "native_dependencies": false,
     "project": "https://github.com/users/lpyaia/projects/1",
-    "project_added": false
+    "project_added": true
   },
   {
     "ticket": 2,
@@ -25,7 +25,7 @@
     ],
     "native_dependencies": true,
     "project": "https://github.com/users/lpyaia/projects/1",
-    "project_added": false
+    "project_added": true
   },
   {
     "ticket": 3,
@@ -40,7 +40,7 @@
     ],
     "native_dependencies": true,
     "project": "https://github.com/users/lpyaia/projects/1",
-    "project_added": false
+    "project_added": true
   },
   {
     "ticket": 4,
@@ -55,7 +55,7 @@
     ],
     "native_dependencies": true,
     "project": "https://github.com/users/lpyaia/projects/1",
-    "project_added": false
+    "project_added": true
   },
   {
     "ticket": 5,
@@ -70,7 +70,7 @@
     ],
     "native_dependencies": true,
     "project": "https://github.com/users/lpyaia/projects/1",
-    "project_added": false
+    "project_added": true
   },
   {
     "ticket": 6,
@@ -86,7 +86,7 @@
     ],
     "native_dependencies": true,
     "project": "https://github.com/users/lpyaia/projects/1",
-    "project_added": false
+    "project_added": true
   },
   {
     "ticket": 7,
@@ -101,7 +101,7 @@
     ],
     "native_dependencies": true,
     "project": "https://github.com/users/lpyaia/projects/1",
-    "project_added": false
+    "project_added": true
   },
   {
     "ticket": 8,
@@ -116,7 +116,7 @@
     ],
     "native_dependencies": true,
     "project": "https://github.com/users/lpyaia/projects/1",
-    "project_added": false
+    "project_added": true
   },
   {
     "ticket": 9,
@@ -131,7 +131,7 @@
     ],
     "native_dependencies": true,
     "project": "https://github.com/users/lpyaia/projects/1",
-    "project_added": false
+    "project_added": true
   },
   {
     "ticket": 10,
@@ -146,7 +146,7 @@
     ],
     "native_dependencies": true,
     "project": "https://github.com/users/lpyaia/projects/1",
-    "project_added": false
+    "project_added": true
   },
   {
     "ticket": 11,
@@ -163,7 +163,7 @@
     ],
     "native_dependencies": true,
     "project": "https://github.com/users/lpyaia/projects/1",
-    "project_added": false
+    "project_added": true
   },
   {
     "ticket": 12,
@@ -176,7 +176,7 @@
     "blocked_by": [],
     "native_dependencies": false,
     "project": "https://github.com/users/lpyaia/projects/1",
-    "project_added": false
+    "project_added": true
   },
   {
     "ticket": 13,
@@ -192,7 +192,7 @@
     ],
     "native_dependencies": true,
     "project": "https://github.com/users/lpyaia/projects/1",
-    "project_added": false
+    "project_added": true
   },
   {
     "ticket": 14,
@@ -207,7 +207,7 @@
     ],
     "native_dependencies": true,
     "project": "https://github.com/users/lpyaia/projects/1",
-    "project_added": false
+    "project_added": true
   },
   {
     "ticket": 15,
@@ -222,7 +222,7 @@
     ],
     "native_dependencies": true,
     "project": "https://github.com/users/lpyaia/projects/1",
-    "project_added": false
+    "project_added": true
   },
   {
     "ticket": 16,
@@ -238,7 +238,7 @@
     ],
     "native_dependencies": true,
     "project": "https://github.com/users/lpyaia/projects/1",
-    "project_added": false
+    "project_added": true
   },
   {
     "ticket": 17,
@@ -255,7 +255,7 @@
     ],
     "native_dependencies": true,
     "project": "https://github.com/users/lpyaia/projects/1",
-    "project_added": false
+    "project_added": true
   },
   {
     "ticket": 18,
@@ -270,7 +270,7 @@
     ],
     "native_dependencies": true,
     "project": "https://github.com/users/lpyaia/projects/1",
-    "project_added": false
+    "project_added": true
   },
   {
     "ticket": 19,
@@ -285,7 +285,7 @@
     ],
     "native_dependencies": true,
     "project": "https://github.com/users/lpyaia/projects/1",
-    "project_added": false
+    "project_added": true
   },
   {
     "ticket": 20,
@@ -300,7 +300,7 @@
     ],
     "native_dependencies": true,
     "project": "https://github.com/users/lpyaia/projects/1",
-    "project_added": false
+    "project_added": true
   },
   {
     "ticket": 21,
@@ -315,7 +315,7 @@
     ],
     "native_dependencies": true,
     "project": "https://github.com/users/lpyaia/projects/1",
-    "project_added": false
+    "project_added": true
   },
   {
     "ticket": 22,
@@ -330,6 +330,6 @@
     ],
     "native_dependencies": true,
     "project": "https://github.com/users/lpyaia/projects/1",
-    "project_added": false
+    "project_added": true
   }
 ]
