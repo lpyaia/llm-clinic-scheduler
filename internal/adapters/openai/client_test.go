@@ -66,8 +66,9 @@ func TestProviderTranslatesToolCallsAndStructuredResponses(t *testing.T) {
 					Strict bool `json:"strict"`
 				} `json:"json_schema"`
 			} `json:"response_format"`
-			Parallel bool `json:"parallel_tool_calls"`
-			Store    bool `json:"store"`
+			Parallel        bool    `json:"parallel_tool_calls"`
+			Store           bool    `json:"store"`
+			ReasoningEffort *string `json:"reasoning_effort"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			t.Error(err)
@@ -75,6 +76,10 @@ func TestProviderTranslatesToolCallsAndStructuredResponses(t *testing.T) {
 
 		if in.Model != "test-model" || in.Parallel || in.Store || len(in.Tools) != 1 || in.Tools[0].Type != "function" || in.Tools[0].Function.Name != "list_appointments" || !in.Tools[0].Function.Strict || in.ResponseFormat.Type != "json_schema" || !in.ResponseFormat.Schema.Strict {
 			t.Errorf("incorrect protocol mapping: %+v", in)
+		}
+
+		if in.ReasoningEffort != nil {
+			t.Error("adapter must not send Luna's reasoning setting to other models")
 		}
 
 		if in.Messages[len(in.Messages)-1].Role == "user" {
@@ -100,6 +105,35 @@ func TestProviderTranslatesToolCallsAndStructuredResponses(t *testing.T) {
 	last, err := client.Complete(context.Background(), in)
 	if err != nil || string(last.Content) != `{"appointment_ids":[]}` {
 		t.Fatalf("last=%+v error=%v", last, err)
+	}
+}
+
+func TestGPT6LunaCanCallToolsThroughChatCompletions(t *testing.T) {
+	client := provider(t, func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Model           string `json:"model"`
+			ReasoningEffort string `json:"reasoning_effort"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+		}
+
+		// GPT-6 Luna requires reasoning_effort=none for Chat Completions tool calling.
+		if request.Model != "gpt-6-luna" || request.ReasoningEffort != "none" {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = io.WriteString(w, `{"error":{"type":"invalid_request_error","param":"reasoning_effort","message":"Tool calling requires reasoning_effort none."}}`)
+
+			return
+		}
+
+		_, _ = io.WriteString(w, `{"choices":[{"finish_reason":"tool_calls","message":{"role":"assistant","content":null,"tool_calls":[{"id":"call-1","type":"function","function":{"name":"list_appointments","arguments":"{}"}}]}}]}`)
+	})
+	client.Model = "gpt-6-luna"
+	in := agent.Request{Messages: []agent.Message{{Role: "user", Content: "Meus agendamentos"}}, Tools: []agent.Tool{{Name: "list_appointments", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)}}, ResponseSchema: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)}
+
+	out, err := client.Complete(context.Background(), in)
+	if err != nil || len(out.ToolCalls) != 1 || out.ToolCalls[0].Name != "list_appointments" {
+		t.Fatalf("GPT-6 Luna tool call failed: response=%+v error=%v", out, err)
 	}
 }
 

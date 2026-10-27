@@ -67,17 +67,23 @@ func (c *Client) Complete(ctx context.Context, in agent.Request) (agent.Response
 				Schema json.RawMessage `json:"schema"`
 			} `json:"json_schema"`
 		} `json:"response_format"`
-		ParallelToolCalls   bool `json:"parallel_tool_calls"`
-		Store               bool `json:"store"`
-		MaxCompletionTokens int  `json:"max_completion_tokens"`
+		ParallelToolCalls   bool   `json:"parallel_tool_calls"`
+		Store               bool   `json:"store"`
+		MaxCompletionTokens int    `json:"max_completion_tokens"`
+		ReasoningEffort     string `json:"reasoning_effort,omitempty"`
 	}
 
 	request.Model = c.Model
 	request.MaxCompletionTokens = 2048
 	request.ResponseFormat.Type = "json_schema"
 	request.ResponseFormat.JSONSchema.Name = "appointment_answer"
+
 	request.ResponseFormat.JSONSchema.Strict = true
 	request.ResponseFormat.JSONSchema.Schema = in.ResponseSchema
+	if c.Model == "gpt-6-luna" {
+		// Chat Completions tool calling requires reasoning to be disabled for Luna.
+		request.ReasoningEffort = "none"
+	}
 
 	for _, item := range in.Messages {
 		wire := message{Role: item.Role, ToolCallID: item.ToolCallID}

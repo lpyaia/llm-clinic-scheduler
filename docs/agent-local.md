@@ -13,6 +13,8 @@ a identidade. Nem o corpo HTTP nem os argumentos da ferramenta aceitam
    de `OPENAI_MODEL` é `gpt-4.1-mini`; alterações exigem um modelo compatível com
    Chat Completions, function calling estrito e Structured Outputs. O adapter
    usa `https://api.openai.com/v1/chat/completions`, sem streaming.
+   Para `OPENAI_MODEL=gpt-6-luna`, o adapter envia `reasoning_effort: "none"`,
+   exigido pelo modelo para usar function calling nesse endpoint.
 2. Inicie o banco e aplique os dados iniciais:
 
    ```powershell
