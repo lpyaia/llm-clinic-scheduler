@@ -15,3 +15,5 @@ Run typechecking regularly, single test files regularly, and the full test suite
 Once done, call the Skill tool with "code-review" to review the work.
 
 Commit your work to the current branch.
+
+Whenever you start a new task, assing the ticket to the user and update the ticket status to In Progress in the issue tracker that is being currently used. For github projects, use the gh cli to update the tickets
