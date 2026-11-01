@@ -15,15 +15,6 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-// SearchPreferences stores resolved calendar boundaries, so follow-up messages
-// retain the original dates even when the clock advances.
-type SearchPreferences struct {
-	Doctor, Specialty, Period string
-	From, To                  time.Time
-	// WindowFrom retains the selected lower bound before a weekday refinement.
-	WindowFrom time.Time
-}
-
 type Slot struct {
 	ID         uuid.UUID `json:"id"`
 	DoctorName string    `json:"doctor_name"`
@@ -51,40 +42,13 @@ func clarification(message string) Result {
 }
 
 func (a *Agent) search(ctx context.Context, raw json.RawMessage, preferences *SearchPreferences) (Result, error) {
-	var args struct {
-		Doctor, Specialty, Period, Date, From, To *string
-	}
-	if err := decodeObject(raw, &args, "doctor", "specialty", "period", "date", "from", "to"); err != nil {
-		return Result{}, invalidResponse()
-	}
-
-	next := *preferences
-	for _, field := range []struct {
-		input  *string
-		target *string
-	}{{args.Doctor, &next.Doctor}, {args.Specialty, &next.Specialty}, {args.Period, &next.Period}} {
-		if field.input != nil {
-			*field.target = strings.TrimSpace(*field.input)
-		}
-	}
-
-	if _, _, err := domain.PeriodBounds(next.Period); err != nil {
-		return Result{}, invalidResponse()
-	}
-
-	if args.Date != nil && *args.Date == "clarify" {
-		*preferences = next
-		return clarification("Qual data ou intervalo você prefere? Informe também o período, se desejar."), nil
-	}
-
-	if err := a.searchDates(&next, args.Date, args.From, args.To); err != nil {
+	next, question, err := preferences.refine(raw, a.core.Clock, a.core.Location)
+	if err != nil {
 		return Result{}, err
 	}
 
-	// Save unresolved names as well: a clarification must retain the other preferences.
-	*preferences = next
-	if next.Doctor == "" && next.Specialty == "" {
-		return clarification("Com qual médico ou especialidade você quer procurar horários?"), nil
+	if question != "" {
+		return clarification(question), nil
 	}
 
 	doctors, err := a.core.ListDoctors(ctx, uuid.Nil)
@@ -176,97 +140,6 @@ func (a *Agent) search(ctx context.Context, raw json.RawMessage, preferences *Se
 	}
 
 	return Result{Message: message.String(), Appointments: []Appointment{}, Availability: availability}, nil
-}
-
-func (a *Agent) searchDates(next *SearchPreferences, date, from, to *string) error {
-	if date != nil {
-		now := a.core.Clock.Now().In(a.core.Location)
-		day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, a.core.Location)
-		weekdayRefinement := false
-
-		switch *date {
-		case "", "earliest":
-			next.From, next.To = time.Time{}, time.Time{}
-		case "today":
-			next.From, next.To = day, day.AddDate(0, 0, 1)
-		case "tomorrow":
-			next.From, next.To = day.AddDate(0, 0, 1), day.AddDate(0, 0, 2)
-		case "this_week":
-			next.From, next.To = domain.WeekBounds(now, a.core.Location)
-		case "next_week":
-			_, start := domain.WeekBounds(now, a.core.Location)
-			next.From, next.To = start, start.AddDate(0, 0, 7)
-		default:
-			weekdayRefinement = true
-			weekdays := map[string]time.Weekday{
-				"after_monday":    time.Monday,
-				"after_tuesday":   time.Tuesday,
-				"after_wednesday": time.Wednesday,
-				"after_thursday":  time.Thursday,
-				"after_friday":    time.Friday,
-				"after_saturday":  time.Saturday,
-				"after_sunday":    time.Sunday,
-			}
-
-			weekday, ok := weekdays[*date]
-			if !ok {
-				return invalidResponse()
-			}
-
-			base := next.WindowFrom
-			if base.IsZero() {
-				base, _ = domain.WeekBounds(now, a.core.Location)
-				candidate := base.AddDate(0, 0, (int(weekday)+6)%7+1)
-				if candidate.Before(day) {
-					base = base.AddDate(0, 0, 7)
-				}
-
-				next.WindowFrom = base
-			}
-
-			start, _ := domain.WeekBounds(base, a.core.Location)
-			start = start.AddDate(0, 0, (int(weekday)+6)%7+1)
-			if start.Before(base) {
-				start = base
-			}
-
-			next.From = start
-		}
-
-		if !weekdayRefinement {
-			next.WindowFrom = next.From
-		}
-	}
-
-	for _, field := range []struct {
-		input  *string
-		target *time.Time
-	}{{from, &next.From}, {to, &next.To}} {
-		if field.input == nil {
-			continue
-		}
-
-		if *field.input == "" {
-			*field.target = time.Time{}
-			if field.target == &next.From {
-				next.WindowFrom = time.Time{}
-			}
-
-			continue
-		}
-
-		parsed, err := time.Parse(time.RFC3339, *field.input)
-		if err != nil {
-			return invalidResponse()
-		}
-
-		*field.target = parsed.In(a.core.Location)
-		if field.target == &next.From {
-			next.WindowFrom = next.From
-		}
-	}
-
-	return nil
 }
 
 func normalizeName(name string) string {
