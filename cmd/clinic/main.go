@@ -12,6 +12,8 @@ import (
 	_ "time/tzdata"
 
 	"github.com/lpyaia/llm-clinic-scheduler/internal/adapters/httpapi"
+	"github.com/lpyaia/llm-clinic-scheduler/internal/adapters/openai"
+	"github.com/lpyaia/llm-clinic-scheduler/internal/agent"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/application"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/config"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/infrastructure/postgres"
@@ -89,7 +91,15 @@ func run(logger *slog.Logger) error {
 	}
 
 	service := &application.Service{Repo: store, Clock: application.SystemClock{}, Location: loc}
-	app := httpapi.New(service, store.Ping, logger, timeoutConfig.HTTPRequest)
+
+	var assistant *agent.Agent
+
+	if key := os.Getenv("OPENAI_API_KEY"); key != "" {
+		model := &openai.Client{APIKey: key, Model: env("OPENAI_MODEL", "gpt-4.1-mini")}
+		assistant = agent.New(service, model)
+	}
+
+	app := httpapi.New(service, store.Ping, logger, timeoutConfig.HTTPRequest, assistant)
 
 	stopped := make(chan struct{})
 

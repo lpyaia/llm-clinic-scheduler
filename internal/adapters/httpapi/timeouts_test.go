@@ -28,7 +28,7 @@ func TestRequestDeadlineConfiguration(t *testing.T) {
 
 				return nil
 			}
-			app := New(nil, ping, slog.New(slog.NewTextHandler(io.Discard, nil)), test.timeout)
+			app := New(nil, ping, slog.New(slog.NewTextHandler(io.Discard, nil)), test.timeout, nil)
 			req := httptest.NewRequest("GET", "/health/ready", nil)
 
 			resp, err := app.Test(req)
@@ -66,7 +66,7 @@ func TestRequestTimeoutReachesDatabaseOperation(t *testing.T) {
 
 		return ctx.Err()
 	}
-	app := New(nil, ping, slog.New(slog.NewTextHandler(io.Discard, nil)), 5*time.Millisecond)
+	app := New(nil, ping, slog.New(slog.NewTextHandler(io.Discard, nil)), 5*time.Millisecond, nil)
 	req := httptest.NewRequest("GET", "/health/ready", nil)
 
 	resp, err := app.Test(req)

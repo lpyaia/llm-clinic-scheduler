@@ -203,6 +203,13 @@ Cobertura funcional: disputa por slot, limite semanal concorrente, confirmação
 
 ## Próximas fases
 
+O primeiro fluxo da V2 já está disponível: [consulta conversacional de agendamentos](docs/agent-local.md).
+`POST /v1/agent/messages` recebe uma mensagem em português e usa a sessão existente.
+O adapter OpenAI é opcional: configure `OPENAI_API_KEY` para habilitá-lo e
+`OPENAI_MODEL` para escolher um modelo compatível com Chat Completions, tools e
+Structured Outputs (padrão `gpt-4.1-mini`). Sem chave, apenas essa rota retorna
+`503 AGENT_UNAVAILABLE`. Os testes usam modelos simulados e servidor HTTP local.
+
 1. Agente em português, abstração de LLM, tool calling, loop limitado e estado em memória. Tools reutilizam os casos de uso; confirmações ficam ligadas ao ID da ação pendente.
 2. Traces, métricas de tokens/latência/custo e avaliações com dataset manual e relógio controlado.
 3. RAG com documentos da clínica, ingestão, embeddings, pgvector, citações e abstention.
@@ -210,4 +217,4 @@ Cobertura funcional: disputa por slot, limite semanal concorrente, confirmação
 5. Conversas e mensagens persistidas, com serialização por conversa.
 6. Adapter WhatsApp com deduplicação de mensagens e domínio independente do canal.
 
-Frontend, IA, RAG, WhatsApp e deployment em produção não fazem parte desta entrega.
+Frontend, RAG, WhatsApp e deployment em produção não fazem parte desta entrega.
