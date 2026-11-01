@@ -13,13 +13,16 @@ security:
 paths:
   /v1/agent/messages:
     post:
-      operationId: queryAppointmentsConversationally
-      summary: Consultar agendamentos em português
+      operationId: querySchedulingConversationally
+      summary: Consultar agendamentos e buscar horários em português
       description: >-
-        Resolve o paciente pela sessão. Cada requisição tem histórico próprio, sem
-        memória entre mensagens. O modelo chama list_appointments com filtros de
-        status e datas RFC 3339; o padrão é scheduled. A resposta em português é
-        montada pelo servidor a partir dos resultados, no fuso da clínica.
+        Resolve o paciente pela sessão. Sem conversation_id, inicia uma conversa;
+        repita o ID retornado para preservar histórico e preferências de busca.
+        Conversas pertencem ao paciente autenticado, vivem em memória e são perdidas
+        ao reiniciar. IDs desconhecidos ou de outro paciente retornam 404.
+        O modelo chama list_appointments ou find_available_slots; nomes são
+        resolvidos pelo catálogo e datas relativas usam o relógio e fuso da clínica.
+        A resposta em português é montada pelo servidor a partir dos resultados reais.
         Limite de quatro chamadas ao modelo. Requer OPENAI_API_KEY no servidor.
       requestBody:
         required: true
@@ -30,6 +33,10 @@ paths:
               additionalProperties: false
               required: [message]
               properties:
+                conversation_id:
+                  type: string
+                  format: uuid
+                  description: ID retornado anteriormente. Omita para iniciar outra conversa.
                 message:
                   type: string
                   description: Mensagem não vazia, com até 4000 bytes UTF-8.
@@ -42,6 +49,7 @@ paths:
               schema: { $ref: '#/components/schemas/AgentReply' }
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
         '502':
           description: MODEL_INVALID_RESPONSE ou AGENT_STEP_LIMIT. Nenhuma mutação é executada.
           content:
@@ -380,9 +388,27 @@ components:
         version: { type: integer, minimum: 1 }
     AgentReply:
       type: object
-      required: [message, appointments]
+      required: [conversation_id, message, appointments]
       properties:
+        conversation_id: { type: string, format: uuid }
         message: { type: string }
+        availability:
+          type: object
+          description: Presente somente quando uma busca de horários foi concluída.
+          required: [slots, searched_from, searched_until, expanded]
+          properties:
+            slots:
+              type: array
+              items:
+                type: object
+                required: [id, doctor_name, starts_at]
+                properties:
+                  id: { type: string, format: uuid }
+                  doctor_name: { type: string }
+                  starts_at: { type: string, format: date-time }
+            searched_from: { type: string, format: date-time }
+            searched_until: { type: string, format: date-time }
+            expanded: { type: boolean }
         appointments:
           type: array
           items:
