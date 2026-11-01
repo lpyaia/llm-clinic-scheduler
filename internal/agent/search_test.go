@@ -20,18 +20,23 @@ func (c searchClock) Now() time.Time { return c.now }
 
 type catalogRepo struct {
 	application.Repository
-	doctors     []domain.Doctor
-	specialties []domain.Specialty
-	slots       []domain.Slot
+	doctors                              []domain.Doctor
+	specialties                          []domain.Specialty
+	slots                                []domain.Slot
+	doctorsErr, specialtiesErr, slotsErr error
 }
 
 func (r *catalogRepo) Doctors(context.Context, uuid.UUID) ([]domain.Doctor, error) {
-	return r.doctors, nil
+	return r.doctors, r.doctorsErr
 }
 func (r *catalogRepo) Specialties(context.Context) ([]domain.Specialty, error) {
-	return r.specialties, nil
+	return r.specialties, r.specialtiesErr
 }
 func (r *catalogRepo) Slots(_ context.Context, f application.SlotFilter) ([]domain.Slot, error) {
+	if r.slotsErr != nil {
+		return nil, r.slotsErr
+	}
+
 	rows := []domain.Slot{}
 
 	for _, slot := range r.slots {

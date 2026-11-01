@@ -85,6 +85,12 @@ a identidade. Nem o corpo HTTP nem os argumentos da ferramenta aceitam
    `from`/`to` RFC 3339. Preferências de data são armazenadas como instantes, sem
    reinterpretar “semana que vem” a cada mensagem.
 
+   O módulo de preferências em `internal/agent/preferences.go` concentra atualização,
+   limpeza, esclarecimento e resolução de datas. A busca recebe os critérios resolvidos
+   e mantém a resolução de nomes no catálogo. O contexto JSON enviado ao modelo preserva
+   o formato existente; o armazenamento da conversa confirma preferências e histórico
+   juntos após o sucesso da interação.
+
    `application.Service.FindSlots` mantém a política existente: sem fim explícito,
    busca duas semanas e amplia até oito; com fim explícito, não amplia. O objeto
    `availability` contém apenas slots reais, `searched_from`, `searched_until` e
