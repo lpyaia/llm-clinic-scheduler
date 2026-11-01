@@ -70,7 +70,9 @@ a identidade. Nem o corpo HTTP nem os argumentos da ferramenta aceitam
    `tomorrow`, `this_week`, `next_week`, `after_monday` até `after_sunday` e
    `earliest` usando o relógio injetado e o fuso da clínica. Semanas são de segunda
    a segunda (fim exclusivo); “depois de terça” começa na quarta-feira, usando a
-   semana já escolhida ou a próxima ocorrência futura. `earliest` remove limites
+   semana já escolhida ou a próxima ocorrência futura. Refinamentos mantêm os
+   limites explícitos; trocar o dia da semana substitui o refinamento anterior
+   dentro desses limites. `earliest` remove limites
    de data para buscar a primeira janela com disponibilidade. Datas explícitas usam
    `from`/`to` RFC 3339. Preferências de data são armazenadas como instantes, sem
    reinterpretar “semana que vem” a cada mensagem.

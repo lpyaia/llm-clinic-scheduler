@@ -125,6 +125,77 @@ func TestRepeatingWeekdayRefinementKeepsSelectedWeek(t *testing.T) {
 	}
 }
 
+func TestWeekdayRefinementDoesNotWidenExplicitInterval(t *testing.T) {
+	core, repo := searchFixture()
+	inside := repo.slots[0]
+	inside.ID, inside.StartsAt = uuid.New(), inside.StartsAt.AddDate(0, 0, 1)
+	repo.slots = append(repo.slots, inside)
+	step := 0
+	model := modelFunc(func(context.Context, agent.Request) (agent.Response, error) {
+		step++
+		args := `{"doctor":"Ana","from":"2026-11-05T00:00:00-03:00","to":"2026-11-07T00:00:00-03:00"}`
+		if step > 1 {
+			args = `{"date":"after_tuesday"}`
+		}
+
+		return agent.Response{ToolCalls: []agent.ToolCall{{ID: "search", Name: "find_available_slots", Arguments: json.RawMessage(args)}}}, nil
+	})
+	a, p := agent.New(core, model), domain.Principal{PatientID: uuid.New()}
+
+	first, err := a.Reply(context.Background(), p, "Ana de quinta até sábado")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, advanceClock := range []bool{false, true} {
+		if advanceClock {
+			core.Clock = searchClock{time.Date(2026, 11, 5, 8, 0, 0, 0, core.Location)}
+		}
+
+		out, err := a.ReplyConversation(context.Background(), p, first.ConversationID, "Depois de terça")
+		if err != nil || out.Availability == nil || len(out.Availability.Slots) != 1 || out.Availability.Slots[0].ID != inside.ID || out.Availability.Expanded || out.Availability.Until.Format(time.RFC3339) != "2026-11-07T00:00:00-03:00" {
+			t.Fatalf("refinement escaped selected interval: %+v err=%v", out, err)
+		}
+	}
+}
+
+func TestReplacingWeekdayPreferenceCanMoveEarlierWithinSelectedWeek(t *testing.T) {
+	core, repo := searchFixture()
+	later := repo.slots[0]
+	later.ID, later.StartsAt = uuid.New(), later.StartsAt.AddDate(0, 0, 3)
+	repo.slots = append(repo.slots, later)
+	step := 0
+	model := modelFunc(func(context.Context, agent.Request) (agent.Response, error) {
+		step++
+		args := `{"doctor":"Ana","date":"next_week"}`
+		if step == 2 {
+			args = `{"date":"after_friday"}`
+		}
+
+		if step == 3 {
+			args = `{"date":"after_tuesday"}`
+		}
+
+		return agent.Response{ToolCalls: []agent.ToolCall{{ID: "search", Name: "find_available_slots", Arguments: json.RawMessage(args)}}}, nil
+	})
+	a, p := agent.New(core, model), domain.Principal{PatientID: uuid.New()}
+
+	out, err := a.Reply(context.Background(), p, "Ana semana que vem")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err = a.ReplyConversation(context.Background(), p, out.ConversationID, "Depois de sexta")
+	if err != nil || out.Availability == nil || len(out.Availability.Slots) != 1 {
+		t.Fatalf("Friday=%+v err=%v", out, err)
+	}
+
+	out, err = a.ReplyConversation(context.Background(), p, out.ConversationID, "Prefiro depois de terça")
+	if err != nil || out.Availability == nil || len(out.Availability.Slots) != 2 || out.Availability.From.Format(time.RFC3339) != "2026-11-04T00:00:00-03:00" {
+		t.Fatalf("replacement=%+v err=%v", out, err)
+	}
+}
+
 func TestConversationRetainsAndReplacesSearchPreferences(t *testing.T) {
 	core, repo := searchFixture()
 	morning := repo.slots[0]

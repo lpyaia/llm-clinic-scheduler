@@ -20,6 +20,8 @@ import (
 type SearchPreferences struct {
 	Doctor, Specialty, Period string
 	From, To                  time.Time
+	// WindowFrom retains the selected lower bound before a weekday refinement.
+	WindowFrom time.Time
 }
 
 type Slot struct {
@@ -154,6 +156,7 @@ func (a *Agent) searchDates(next *SearchPreferences, date, from, to *string) err
 	if date != nil {
 		now := a.core.Clock.Now().In(a.core.Location)
 		day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, a.core.Location)
+		weekdayRefinement := false
 
 		switch *date {
 		case "", "earliest":
@@ -168,6 +171,7 @@ func (a *Agent) searchDates(next *SearchPreferences, date, from, to *string) err
 			_, start := domain.WeekBounds(now, a.core.Location)
 			next.From, next.To = start, start.AddDate(0, 0, 7)
 		default:
+			weekdayRefinement = true
 			weekdays := map[string]time.Weekday{"after_monday": time.Monday, "after_tuesday": time.Tuesday, "after_wednesday": time.Wednesday, "after_thursday": time.Thursday, "after_friday": time.Friday, "after_saturday": time.Saturday, "after_sunday": time.Sunday}
 
 			weekday, ok := weekdays[*date]
@@ -175,18 +179,28 @@ func (a *Agent) searchDates(next *SearchPreferences, date, from, to *string) err
 				return invalidResponse()
 			}
 
-			base := day
-			if next.From.After(base) {
-				base = next.From.In(a.core.Location)
+			base := next.WindowFrom
+			if base.IsZero() {
+				base, _ = domain.WeekBounds(now, a.core.Location)
+				candidate := base.AddDate(0, 0, (int(weekday)+6)%7+1)
+				if candidate.Before(day) {
+					base = base.AddDate(0, 0, 7)
+				}
+
+				next.WindowFrom = base
 			}
 
 			start, _ := domain.WeekBounds(base, a.core.Location)
 			start = start.AddDate(0, 0, (int(weekday)+6)%7+1)
-			if start.Before(day) {
-				start = start.AddDate(0, 0, 7)
+			if start.Before(base) {
+				start = base
 			}
 
 			next.From = start
+		}
+
+		if !weekdayRefinement {
+			next.WindowFrom = next.From
 		}
 	}
 
@@ -200,6 +214,10 @@ func (a *Agent) searchDates(next *SearchPreferences, date, from, to *string) err
 
 		if *field.input == "" {
 			*field.target = time.Time{}
+			if field.target == &next.From {
+				next.WindowFrom = time.Time{}
+			}
+
 			continue
 		}
 
@@ -209,6 +227,9 @@ func (a *Agent) searchDates(next *SearchPreferences, date, from, to *string) err
 		}
 
 		*field.target = parsed.In(a.core.Location)
+		if field.target == &next.From {
+			next.WindowFrom = next.From
+		}
 	}
 
 	return nil
