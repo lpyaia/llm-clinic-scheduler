@@ -9,7 +9,9 @@
       "debugAdapter": "dlv-dap",
       "program": "${workspaceFolder}/cmd/clinic",
       "cwd": "${workspaceFolder}",
-      "args": ["serve"],
+      "args": [
+        "serve"
+      ],
       "envFile": "${workspaceFolder}/.env",
       "env": {
         "HTTP_REQUEST_TIMEOUT": "0s",
@@ -25,7 +27,9 @@
       "debugAdapter": "dlv-dap",
       "program": "${workspaceFolder}/cmd/clinic",
       "cwd": "${workspaceFolder}",
-      "args": ["migrate"],
+      "args": [
+        "migrate"
+      ],
       "envFile": "${workspaceFolder}/.env",
       "env": {
         "HTTP_REQUEST_TIMEOUT": "0s",
@@ -41,7 +45,9 @@
       "debugAdapter": "dlv-dap",
       "program": "${workspaceFolder}/cmd/clinic",
       "cwd": "${workspaceFolder}",
-      "args": ["seed"],
+      "args": [
+        "seed"
+      ],
       "envFile": "${workspaceFolder}/.env",
       "env": {
         "HTTP_REQUEST_TIMEOUT": "0s",

@@ -38,7 +38,11 @@ func TestHTTPConvertsUUIDFiltersAndPreservesJSONStringIDs(t *testing.T) {
 	r := &uuidRepository{slot: domain.Slot{ID: uuid.New(), DoctorID: doctorID, StartsAt: clock{}.Now().Add(time.Hour)}}
 	service := &application.Service{Repo: r, Clock: clock{}, Location: time.UTC}
 	app := New(service, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), timeouts.DefaultHTTP, nil)
-	req := httptest.NewRequest("GET", "/v1/slots?doctor_id="+strings.ToUpper(doctorID.String())+"&specialty_id="+specialtyID.String(), nil)
+	req := httptest.NewRequest(
+		"GET",
+		"/v1/slots?doctor_id="+strings.ToUpper(doctorID.String())+"&specialty_id="+specialtyID.String(),
+		nil,
+	)
 	req.Header.Set("Authorization", "Bearer "+strings.Repeat("a", 64))
 
 	resp, err := app.Test(req)
@@ -80,7 +84,13 @@ func TestHTTPActionOmitsAbsentUUIDs(t *testing.T) {
 		{operation: domain.CancelAppointment, appointmentID: uuid.New()},
 	} {
 		t.Run(test.operation, func(t *testing.T) {
-			action := domain.Action{ID: uuid.New(), Operation: test.operation, SlotID: test.slotID, AppointmentID: test.appointmentID, Status: domain.Pending}
+			action := domain.Action{
+				ID:            uuid.New(),
+				Operation:     test.operation,
+				SlotID:        test.slotID,
+				AppointmentID: test.appointmentID,
+				Status:        domain.Pending,
+			}
 			r := &uuidRepository{action: action}
 			service := &application.Service{Repo: r, Clock: clock{}, Location: time.UTC}
 			app := New(service, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), timeouts.DefaultHTTP, nil)
@@ -106,7 +116,10 @@ func TestHTTPActionOmitsAbsentUUIDs(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			for field, expected := range map[string]uuid.UUID{"slot_id": test.slotID, "appointment_id": test.appointmentID} {
+			for field, expected := range map[string]uuid.UUID{
+				"slot_id":        test.slotID,
+				"appointment_id": test.appointmentID,
+			} {
 				actual, present := body[field]
 				if expected == uuid.Nil {
 					if present {

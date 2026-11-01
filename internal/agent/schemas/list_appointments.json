@@ -1,0 +1,38 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "status": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "scheduled",
+        "cancelled",
+        "completed",
+        "",
+        null
+      ]
+    },
+    "from": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Início inclusivo em RFC 3339, ou null."
+    },
+    "to": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Fim exclusivo em RFC 3339, ou null."
+    }
+  },
+  "required": [
+    "status",
+    "from",
+    "to"
+  ]
+}

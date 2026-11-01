@@ -59,12 +59,21 @@ func TestValidateTestDatabase(t *testing.T) {
 		name, appURL, testURL string
 		valid                 bool
 	}{
-		{name: "dedicated", appURL: "postgres://localhost/clinic", testURL: "postgres://localhost/clinic_test", valid: true},
+		{
+			name:    "dedicated",
+			appURL:  "postgres://localhost/clinic",
+			testURL: "postgres://localhost/clinic_test",
+			valid:   true,
+		},
 		{name: "missing", appURL: "postgres://localhost/clinic"},
 		{name: "invalid test URL", testURL: "postgres://localhost:invalid/clinic_test"},
 		{name: "same database", appURL: "postgres://localhost/clinic", testURL: "postgres://127.0.0.1/clinic"},
 		{name: "same default database", testURL: "postgres://localhost/clinic"},
-		{name: "invalid app URL", appURL: "postgres://localhost:invalid/clinic", testURL: "postgres://localhost/clinic_test"},
+		{
+			name:    "invalid app URL",
+			appURL:  "postgres://localhost:invalid/clinic",
+			testURL: "postgres://localhost/clinic_test",
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Setenv("DATABASE_URL", test.appURL)

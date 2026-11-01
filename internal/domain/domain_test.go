@@ -28,7 +28,27 @@ func TestValidateChange(t *testing.T) {
 		offset time.Duration
 		valid  bool
 	}{
-		{Scheduled, time.Second, true}, {Scheduled, 0, false}, {Scheduled, -time.Second, false}, {Cancelled, time.Hour, false}, {Completed, time.Hour, false},
+		{
+			Scheduled,
+			time.Second,
+			true,
+		}, {
+			Scheduled,
+			0,
+			false,
+		}, {
+			Scheduled,
+			-time.Second,
+			false,
+		}, {
+			Cancelled,
+			time.Hour,
+			false,
+		}, {
+			Completed,
+			time.Hour,
+			false,
+		},
 	} {
 		err := ValidateChange(Appointment{Status: test.status, StartsAt: now.Add(test.offset)}, now)
 		if (err == nil) != test.valid {

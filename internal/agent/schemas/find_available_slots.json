@@ -1,0 +1,76 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "doctor": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "specialty": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "period": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "morning",
+        "afternoon",
+        "evening",
+        "",
+        null
+      ]
+    },
+    "date": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "today",
+        "tomorrow",
+        "this_week",
+        "next_week",
+        "earliest",
+        "after_monday",
+        "after_tuesday",
+        "after_wednesday",
+        "after_thursday",
+        "after_friday",
+        "after_saturday",
+        "after_sunday",
+        "clarify",
+        "",
+        null
+      ]
+    },
+    "from": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Início inclusivo RFC3339. String vazia limpa."
+    },
+    "to": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Fim exclusivo RFC3339. String vazia limpa."
+    }
+  },
+  "required": [
+    "doctor",
+    "specialty",
+    "period",
+    "date",
+    "from",
+    "to"
+  ]
+}

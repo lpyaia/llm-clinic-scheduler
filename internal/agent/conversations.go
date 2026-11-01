@@ -36,7 +36,12 @@ func NewMemoryConversations() *MemoryConversations {
 	return &MemoryConversations{entries: make(map[uuid.UUID]*memoryConversation)}
 }
 
-func (m *MemoryConversations) Update(ctx context.Context, patientID, id uuid.UUID, create bool, update func(*Conversation) error) error {
+func (m *MemoryConversations) Update(
+	ctx context.Context,
+	patientID, id uuid.UUID,
+	create bool,
+	update func(*Conversation) error,
+) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}

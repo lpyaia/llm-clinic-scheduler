@@ -32,7 +32,9 @@ a identidade. Nem o corpo HTTP nem os argumentos da ferramenta aceitam
    $session = Invoke-RestMethod "$base/v1/dev/sessions" -Method Post -ContentType 'application/json' -Body $body
    $headers = @{ Authorization = "Bearer $($session.token)" }
    $question = @{ message = 'Quais atendimentos tenho marcados?' } | ConvertTo-Json
-   Invoke-RestMethod "$base/v1/agent/messages" -Method Post -Headers $headers -ContentType 'application/json; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($question))
+   Invoke-RestMethod "$base/v1/agent/messages" -Method Post -Headers $headers `
+     -ContentType 'application/json; charset=utf-8' `
+     -Body ([System.Text.Encoding]::UTF8.GetBytes($question))
    ```
 
    Uma conta nova recebe `appointments: []` e uma mensagem informando que não há
@@ -51,11 +53,17 @@ a identidade. Nem o corpo HTTP nem os argumentos da ferramenta aceitam
 
    ```powershell
    $question = @{ message = 'Quero cardiologia semana que vem à tarde' } | ConvertTo-Json
-   $reply = Invoke-RestMethod "$base/v1/agent/messages" -Method Post -Headers $headers -ContentType 'application/json; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($question))
+   $reply = Invoke-RestMethod "$base/v1/agent/messages" -Method Post -Headers $headers `
+     -ContentType 'application/json; charset=utf-8' `
+     -Body ([System.Text.Encoding]::UTF8.GetBytes($question))
    $question = @{ conversation_id = $reply.conversation_id; message = 'Depois de terça' } | ConvertTo-Json
-   $reply = Invoke-RestMethod "$base/v1/agent/messages" -Method Post -Headers $headers -ContentType 'application/json; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($question))
+   $reply = Invoke-RestMethod "$base/v1/agent/messages" -Method Post -Headers $headers `
+     -ContentType 'application/json; charset=utf-8' `
+     -Body ([System.Text.Encoding]::UTF8.GetBytes($question))
    $question = @{ conversation_id = $reply.conversation_id; message = 'Prefiro de manhã' } | ConvertTo-Json
-   Invoke-RestMethod "$base/v1/agent/messages" -Method Post -Headers $headers -ContentType 'application/json; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($question))
+   Invoke-RestMethod "$base/v1/agent/messages" -Method Post -Headers $headers `
+     -ContentType 'application/json; charset=utf-8' `
+     -Body ([System.Text.Encoding]::UTF8.GetBytes($question))
    ```
 
    Use nomes presentes no catálogo local (`GET /v1/doctors` e `/v1/specialties`).

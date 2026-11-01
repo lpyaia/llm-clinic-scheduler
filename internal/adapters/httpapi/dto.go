@@ -58,7 +58,18 @@ type appointmentDTO struct {
 }
 
 func appointmentResponse(a domain.Appointment, loc *time.Location) appointmentDTO {
-	return appointmentDTO{ID: a.ID, PatientID: a.PatientID, SlotID: a.SlotID, DoctorID: a.DoctorID, DoctorName: a.DoctorName, Category: a.Category, Status: a.Status, StartsAt: a.StartsAt.In(loc), DurationMinutes: 30, Version: a.Version}
+	return appointmentDTO{
+		ID:              a.ID,
+		PatientID:       a.PatientID,
+		SlotID:          a.SlotID,
+		DoctorID:        a.DoctorID,
+		DoctorName:      a.DoctorName,
+		Category:        a.Category,
+		Status:          a.Status,
+		StartsAt:        a.StartsAt.In(loc),
+		DurationMinutes: 30,
+		Version:         a.Version,
+	}
 }
 
 type prepareRequest struct {
@@ -82,7 +93,16 @@ type actionDTO struct {
 }
 
 func actionResponse(a domain.Action, loc *time.Location) actionDTO {
-	out := actionDTO{ID: a.ID, Operation: a.Operation, Category: a.Category, Status: a.Status, Summary: a.Summary, CreatedAt: a.CreatedAt.In(loc), ExpiresAt: a.ExpiresAt.In(loc), FailureCode: a.FailureCode}
+	out := actionDTO{
+		ID:          a.ID,
+		Operation:   a.Operation,
+		Category:    a.Category,
+		Status:      a.Status,
+		Summary:     a.Summary,
+		CreatedAt:   a.CreatedAt.In(loc),
+		ExpiresAt:   a.ExpiresAt.In(loc),
+		FailureCode: a.FailureCode,
+	}
 	if a.SlotID != uuid.Nil {
 		out.SlotID = &a.SlotID
 	}

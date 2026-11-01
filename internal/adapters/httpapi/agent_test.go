@@ -44,19 +44,38 @@ func (r conversationRepo) Session(_ context.Context, hash string) (domain.Sessio
 	return domain.Session{PatientID: id, ExpiresAt: clock{}.Now().Add(time.Hour)}, nil
 }
 
-func (r conversationRepo) Appointments(_ context.Context, patientID uuid.UUID, _ application.AppointmentFilter) ([]domain.Appointment, error) {
+func (r conversationRepo) Appointments(
+	_ context.Context,
+	patientID uuid.UUID,
+	_ application.AppointmentFilter,
+) ([]domain.Appointment, error) {
 	name := "Dra. Ana"
 	if patientID == r.second {
 		name = "Dr. Bruno"
 	}
 
-	return []domain.Appointment{{ID: patientID, PatientID: patientID, DoctorName: name, Category: "consultation", Status: domain.Scheduled, StartsAt: clock{}.Now()}}, nil
+	return []domain.Appointment{
+		{
+			ID:         patientID,
+			PatientID:  patientID,
+			DoctorName: name,
+			Category:   "consultation",
+			Status:     domain.Scheduled,
+			StartsAt:   clock{}.Now(),
+		},
+	}, nil
 }
 
 func TestConversationFollowUpRequiresOwnerAndValidID(t *testing.T) {
-	core := &application.Service{Repo: conversationRepo{first: uuid.New(), second: uuid.New()}, Clock: clock{}, Location: time.UTC}
+	core := &application.Service{
+		Repo:     conversationRepo{first: uuid.New(), second: uuid.New()},
+		Clock:    clock{},
+		Location: time.UTC,
+	}
 	model := conversationalModel(func(context.Context, agent.Request) (agent.Response, error) {
-		return agent.Response{ToolCalls: []agent.ToolCall{{ID: "search", Name: "find_available_slots", Arguments: json.RawMessage(`{}`)}}}, nil
+		return agent.Response{
+			ToolCalls: []agent.ToolCall{{ID: "search", Name: "find_available_slots", Arguments: json.RawMessage(`{}`)}},
+		}, nil
 	})
 	app := New(core, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), time.Second, agent.New(core, model))
 	request := func(body, token string, status int) agent.Result {
@@ -104,11 +123,17 @@ func TestConversationFollowUpRequiresOwnerAndValidID(t *testing.T) {
 }
 
 func TestConversationUsesOnlyAuthenticatedPatient(t *testing.T) {
-	core := &application.Service{Repo: conversationRepo{first: uuid.New(), second: uuid.New()}, Clock: clock{}, Location: time.UTC}
+	core := &application.Service{
+		Repo:     conversationRepo{first: uuid.New(), second: uuid.New()},
+		Clock:    clock{},
+		Location: time.UTC,
+	}
 	model := conversationalModel(func(_ context.Context, in agent.Request) (agent.Response, error) {
 		last := in.Messages[len(in.Messages)-1]
 		if last.Role == "user" {
-			return agent.Response{ToolCalls: []agent.ToolCall{{ID: "list", Name: "list_appointments", Arguments: json.RawMessage(`{}`)}}}, nil
+			return agent.Response{
+				ToolCalls: []agent.ToolCall{{ID: "list", Name: "list_appointments", Arguments: json.RawMessage(`{}`)}},
+			}, nil
 		}
 
 		var rows []agent.Appointment
@@ -126,7 +151,11 @@ func TestConversationUsesOnlyAuthenticatedPatient(t *testing.T) {
 		{strings.Repeat("a", 64), "Dra. Ana", "Dr. Bruno"},
 		{strings.Repeat("b", 64), "Dr. Bruno", "Dra. Ana"},
 	} {
-		req := httptest.NewRequest("POST", "/v1/agent/messages", strings.NewReader(`{"message":"Quais atendimentos tenho marcados?"}`))
+		req := httptest.NewRequest(
+			"POST",
+			"/v1/agent/messages",
+			strings.NewReader(`{"message":"Quais atendimentos tenho marcados?"}`),
+		)
 		req.Header.Set("Authorization", "Bearer "+test.token)
 		req.Header.Set("Content-Type", "application/json")
 
@@ -137,7 +166,8 @@ func TestConversationUsesOnlyAuthenticatedPatient(t *testing.T) {
 
 		body, err := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
-		if err != nil || resp.StatusCode != 200 || !strings.Contains(string(body), test.want) || strings.Contains(string(body), test.absent) {
+		if err != nil || resp.StatusCode != 200 || !strings.Contains(string(body), test.want) ||
+			strings.Contains(string(body), test.absent) {
 			t.Fatalf("status=%d body=%s error=%v", resp.StatusCode, body, err)
 		}
 	}
@@ -173,7 +203,8 @@ func TestConversationValidationAndProviderFailure(t *testing.T) {
 
 		body, err := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
-		if err != nil || resp.StatusCode != test.status || strings.Contains(string(body), "private") || strings.Contains(string(body), "secret") {
+		if err != nil || resp.StatusCode != test.status || strings.Contains(string(body), "private") ||
+			strings.Contains(string(body), "secret") {
 			t.Fatalf("status=%d body=%s error=%v", resp.StatusCode, body, err)
 		}
 	}
@@ -187,22 +218,57 @@ func TestConversationStopsAtStepLimitAndRequestDeadline(t *testing.T) {
 		status  int
 		code    string
 	}{
-		{name: "loop", timeout: time.Second, status: 502, code: "AGENT_STEP_LIMIT", model: func(_ context.Context, in agent.Request) (agent.Response, error) {
-			return agent.Response{ToolCalls: []agent.ToolCall{{ID: fmt.Sprintf("call-%d", len(in.Messages)), Name: "list_appointments", Arguments: json.RawMessage(`{}`)}}}, nil
-		}},
-		{name: "deadline", timeout: 5 * time.Millisecond, status: 500, code: "INTERNAL_ERROR", model: func(ctx context.Context, _ agent.Request) (agent.Response, error) {
-			<-ctx.Done()
+		{
+			name: "loop", timeout: time.Second, status: 502, code: "AGENT_STEP_LIMIT",
+			model: func(_ context.Context, in agent.Request) (agent.Response, error) {
+				return agent.Response{
+					ToolCalls: []agent.ToolCall{
+						{
+							ID:        fmt.Sprintf("call-%d", len(in.Messages)),
+							Name:      "list_appointments",
+							Arguments: json.RawMessage(`{}`),
+						},
+					},
+				}, nil
+			},
+		},
+		{
+			name: "deadline", timeout: 5 * time.Millisecond, status: 500, code: "INTERNAL_ERROR",
+			model: func(ctx context.Context, _ agent.Request) (agent.Response, error) {
+				<-ctx.Done()
 
-			return agent.Response{}, ctx.Err()
-		}},
-		{name: "malformed", timeout: time.Second, status: 502, code: "MODEL_INVALID_RESPONSE", model: func(context.Context, agent.Request) (agent.Response, error) {
-			return agent.Response{ToolCalls: []agent.ToolCall{{ID: "call", Name: "list_appointments", Arguments: json.RawMessage(`{"patient_id":"other"}`)}}}, nil
-		}},
+				return agent.Response{}, ctx.Err()
+			},
+		},
+		{
+			name: "malformed", timeout: time.Second, status: 502, code: "MODEL_INVALID_RESPONSE",
+			model: func(context.Context, agent.Request) (agent.Response, error) {
+				return agent.Response{
+					ToolCalls: []agent.ToolCall{
+						{
+							ID:        "call",
+							Name:      "list_appointments",
+							Arguments: json.RawMessage(`{"patient_id":"other"}`),
+						},
+					},
+				}, nil
+			},
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			core := &application.Service{Repo: conversationRepo{first: uuid.New()}, Clock: clock{}, Location: time.UTC}
-			app := New(core, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), test.timeout, agent.New(core, test.model))
-			req := httptest.NewRequest("POST", "/v1/agent/messages", strings.NewReader(`{"message":"Meus agendamentos"}`))
+			app := New(
+				core,
+				nil,
+				slog.New(slog.NewTextHandler(io.Discard, nil)),
+				test.timeout,
+				agent.New(core, test.model),
+			)
+			req := httptest.NewRequest(
+				"POST",
+				"/v1/agent/messages",
+				strings.NewReader(`{"message":"Meus agendamentos"}`),
+			)
 			req.Header.Set("Authorization", "Bearer "+strings.Repeat("a", 64))
 			req.Header.Set("Content-Type", "application/json")
 

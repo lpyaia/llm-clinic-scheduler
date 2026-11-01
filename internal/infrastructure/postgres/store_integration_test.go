@@ -97,7 +97,15 @@ func setup(t *testing.T) *fixture {
 	}
 
 	c := &testClock{now: time.Date(2026, 10, 19, 8, 0, 0, 0, loc)}
-	f := &fixture{t: t, store: store, clock: c, doctor: uuid.New(), otherDoctor: uuid.New(), specialty: uuid.New(), dsn: u.String()}
+	f := &fixture{
+		t:           t,
+		store:       store,
+		clock:       c,
+		doctor:      uuid.New(),
+		otherDoctor: uuid.New(),
+		specialty:   uuid.New(),
+		dsn:         u.String(),
+	}
 	f.service = &application.Service{Repo: store, Clock: c, Location: loc}
 	f.must(store.db.Create(&specialtyRow{ID: f.specialty, Name: "Cardiologia"}).Error)
 	f.must(store.db.Create(&doctorRow{ID: f.doctor, Name: "Dra. Ana Silva", SpecialtyID: f.specialty}).Error)
@@ -140,7 +148,10 @@ func (f *fixture) prepare(p domain.Principal, in application.PrepareInput) domai
 	return a
 }
 func (f *fixture) prepareCreate(p domain.Principal, slot uuid.UUID) domain.Action {
-	return f.prepare(p, application.PrepareInput{Operation: domain.CreateAppointment, SlotID: slot, Category: "consultation"})
+	return f.prepare(
+		p,
+		application.PrepareInput{Operation: domain.CreateAppointment, SlotID: slot, Category: "consultation"},
+	)
 }
 func (f *fixture) book(p domain.Principal, slot uuid.UUID) domain.Appointment {
 	f.t.Helper()
@@ -200,7 +211,17 @@ func TestConcurrentSlotBooking(t *testing.T) {
 		t.Fatalf("bookings=%d", count)
 	}
 	// The unique index also protects writes that bypass application validation.
-	err := f.store.InsertAppointment(context.Background(), domain.Appointment{ID: uuid.New(), PatientID: p2.PatientID, SlotID: slot, Category: "exam", Status: domain.Scheduled, Version: 1})
+	err := f.store.InsertAppointment(
+		context.Background(),
+		domain.Appointment{
+			ID:        uuid.New(),
+			PatientID: p2.PatientID,
+			SlotID:    slot,
+			Category:  "exam",
+			Status:    domain.Scheduled,
+			Version:   1,
+		},
+	)
 	code(t, err, "SLOT_UNAVAILABLE")
 }
 
@@ -293,7 +314,11 @@ func TestConfirmationLifecycleAndOwnership(t *testing.T) {
 		id = out.ID
 	}
 
-	_, err = f.service.Prepare(context.Background(), other, application.PrepareInput{Operation: domain.CancelAppointment, AppointmentID: id})
+	_, err = f.service.Prepare(
+		context.Background(),
+		other,
+		application.PrepareInput{Operation: domain.CancelAppointment, AppointmentID: id},
+	)
 	code(t, err, "NOT_FOUND")
 	// A new connection and service retain identity, action, and original response.
 	reopened, err := Open(f.dsn)
@@ -344,16 +369,27 @@ func TestRescheduleCancelAndWeeklyCounting(t *testing.T) {
 	completed := f.book(p, f.slot(2, 9))
 	f.must(f.store.db.Model(&appointmentRow{}).Where("id = ?", completed.ID).Update("status", domain.Completed).Error)
 	f.book(p, f.slot(3, 9))
-	_, err := f.service.Prepare(context.Background(), p, application.PrepareInput{Operation: domain.CreateAppointment, SlotID: f.slot(4, 9), Category: "exam"})
+	_, err := f.service.Prepare(
+		context.Background(),
+		p,
+		application.PrepareInput{Operation: domain.CreateAppointment, SlotID: f.slot(4, 9), Category: "exam"},
+	)
 	code(t, err, "WEEKLY_LIMIT_REACHED")
 
 	target := f.slot(1, 10)
-	move := f.prepare(p, application.PrepareInput{Operation: domain.RescheduleAppointment, AppointmentID: original.ID, SlotID: target})
-	staleCancel := f.prepare(p, application.PrepareInput{Operation: domain.CancelAppointment, AppointmentID: original.ID})
+	move := f.prepare(
+		p,
+		application.PrepareInput{Operation: domain.RescheduleAppointment, AppointmentID: original.ID, SlotID: target},
+	)
+	staleCancel := f.prepare(
+		p,
+		application.PrepareInput{Operation: domain.CancelAppointment, AppointmentID: original.ID},
+	)
 	moved, err := f.service.Confirm(context.Background(), p, move.ID)
 	f.must(err)
 
-	if moved.ID != original.ID || moved.SlotID != target || moved.Category != original.Category || moved.DoctorID != original.DoctorID {
+	if moved.ID != original.ID || moved.SlotID != target || moved.Category != original.Category ||
+		moved.DoctorID != original.DoctorID {
 		t.Fatalf("bad reschedule: %+v", moved)
 	}
 
@@ -366,7 +402,15 @@ func TestRescheduleCancelAndWeeklyCounting(t *testing.T) {
 
 	_, err = f.service.Confirm(context.Background(), p, staleCancel.ID)
 	code(t, err, "APPOINTMENT_CHANGED")
-	_, err = f.service.Prepare(context.Background(), p, application.PrepareInput{Operation: domain.RescheduleAppointment, AppointmentID: moved.ID, SlotID: f.doctorSlot(f.otherDoctor, 1, 14)})
+	_, err = f.service.Prepare(
+		context.Background(),
+		p,
+		application.PrepareInput{
+			Operation:     domain.RescheduleAppointment,
+			AppointmentID: moved.ID,
+			SlotID:        f.doctorSlot(f.otherDoctor, 1, 14),
+		},
+	)
 	code(t, err, "INVALID_INPUT")
 
 	cancel := f.prepare(p, application.PrepareInput{Operation: domain.CancelAppointment, AppointmentID: moved.ID})
@@ -378,7 +422,11 @@ func TestRescheduleCancelAndWeeklyCounting(t *testing.T) {
 	}
 
 	f.book(p, target) // Cancellation frees both its slot and the weekly limit.
-	_, err = f.service.Prepare(context.Background(), p, application.PrepareInput{Operation: domain.CancelAppointment, AppointmentID: completed.ID})
+	_, err = f.service.Prepare(
+		context.Background(),
+		p,
+		application.PrepareInput{Operation: domain.CancelAppointment, AppointmentID: completed.ID},
+	)
 	code(t, err, "APPOINTMENT_NOT_MUTABLE")
 }
 
@@ -388,7 +436,10 @@ func TestFailedReschedulePreservesOriginal(t *testing.T) {
 	other, _ := f.patient()
 	original := f.book(p, f.slot(1, 9))
 	target := f.slot(2, 9)
-	move := f.prepare(p, application.PrepareInput{Operation: domain.RescheduleAppointment, AppointmentID: original.ID, SlotID: target})
+	move := f.prepare(
+		p,
+		application.PrepareInput{Operation: domain.RescheduleAppointment, AppointmentID: original.ID, SlotID: target},
+	)
 	f.book(other, target)
 	_, err := f.service.Confirm(context.Background(), p, move.ID)
 	code(t, err, "SLOT_UNAVAILABLE")
@@ -416,7 +467,10 @@ func TestRescheduleIntoFullWeek(t *testing.T) {
 	original := f.book(p, f.slot(1, 9))
 
 	target := f.slot(8, 14)
-	move := f.prepare(p, application.PrepareInput{Operation: domain.RescheduleAppointment, AppointmentID: original.ID, SlotID: target})
+	move := f.prepare(
+		p,
+		application.PrepareInput{Operation: domain.RescheduleAppointment, AppointmentID: original.ID, SlotID: target},
+	)
 	for day := 8; day <= 10; day++ {
 		f.book(p, f.slot(day, 9))
 	}
@@ -438,8 +492,21 @@ func TestRollbackAndTransientRetry(t *testing.T) {
 	a := f.prepareCreate(p, slot)
 	// Inject a database write failure after the appointment INSERT. The entire
 	// confirmation must roll back, leaving the action pending and retryable.
-	f.must(f.store.db.Exec(`CREATE FUNCTION reject_action_update() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected transient failure'; END; $$`).Error)
-	f.must(f.store.db.Exec(`CREATE TRIGGER fail_action BEFORE UPDATE ON pending_actions FOR EACH ROW EXECUTE FUNCTION reject_action_update()`).Error)
+	f.must(
+		f.store.db.Exec(
+			`CREATE FUNCTION reject_action_update() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'injected transient failure';
+END;
+$$`,
+		).Error,
+	)
+	f.must(
+		f.store.db.Exec(
+			`CREATE TRIGGER fail_action BEFORE UPDATE ON pending_actions
+FOR EACH ROW EXECUTE FUNCTION reject_action_update()`,
+		).Error,
+	)
 
 	_, err := f.service.Confirm(context.Background(), p, a.ID)
 	if err == nil {
@@ -466,7 +533,10 @@ func TestRollbackAndTransientRetry(t *testing.T) {
 	// Explicit transaction rollback also applies to repositories from the UoW.
 	sentinel := errors.New("rollback")
 	err = f.store.Transaction(context.Background(), func(r application.Repository) error {
-		if err := r.InsertPatient(context.Background(), domain.Patient{ID: uuid.New(), FullName: "Rollback", Phone: "+5511888888888"}); err != nil {
+		if err := r.InsertPatient(
+			context.Background(),
+			domain.Patient{ID: uuid.New(), FullName: "Rollback", Phone: "+5511888888888"},
+		); err != nil {
 			return err
 		}
 
@@ -492,7 +562,10 @@ func TestSearchFiltersAndBoundaries(t *testing.T) {
 		period string
 		want   int
 	}{{"morning", 1}, {"afternoon", 1}, {"evening", 1}, {"", 3}} {
-		out, err := f.service.FindSlots(context.Background(), application.SearchInput{DoctorID: f.doctor, SpecialtyID: f.specialty, Period: test.period})
+		out, err := f.service.FindSlots(
+			context.Background(),
+			application.SearchInput{DoctorID: f.doctor, SpecialtyID: f.specialty, Period: test.period},
+		)
 		f.must(err)
 
 		if len(out.Slots) != test.want {
@@ -501,21 +574,30 @@ func TestSearchFiltersAndBoundaries(t *testing.T) {
 	}
 
 	f.book(p, morning)
-	out, err := f.service.FindSlots(context.Background(), application.SearchInput{DoctorID: f.doctor, Period: "morning"})
+	out, err := f.service.FindSlots(
+		context.Background(),
+		application.SearchInput{DoctorID: f.doctor, Period: "morning"},
+	)
 	f.must(err)
 
 	if len(out.Slots) != 0 || !out.Until.Equal(f.clock.now.AddDate(0, 0, 56)) {
 		t.Fatal("reserved slot available or wrong horizon")
 	}
 
-	explicit, err := f.service.FindSlots(context.Background(), application.SearchInput{DoctorID: f.doctor, To: f.clock.now.Add(time.Hour)})
+	explicit, err := f.service.FindSlots(
+		context.Background(),
+		application.SearchInput{DoctorID: f.doctor, To: f.clock.now.Add(time.Hour)},
+	)
 	f.must(err)
 
 	if len(explicit.Slots) != 0 || explicit.Expanded {
 		t.Fatal("explicit interval expanded")
 	}
 	// Intersect filters rather than widening to other doctors.
-	wrong, err := f.service.FindSlots(context.Background(), application.SearchInput{DoctorID: f.doctor, SpecialtyID: uuid.New()})
+	wrong, err := f.service.FindSlots(
+		context.Background(),
+		application.SearchInput{DoctorID: f.doctor, SpecialtyID: uuid.New()},
+	)
 	f.must(err)
 
 	if len(wrong.Slots) != 0 {
@@ -585,7 +667,13 @@ func TestHTTPFullLifecycle(t *testing.T) {
 	f := setup(t)
 	slot := f.slot(1, 14)
 	next := f.slot(2, 14)
-	app := httpapi.New(f.service, f.store.Ping, slog.New(slog.NewTextHandler(io.Discard, nil)), timeouts.DefaultHTTP, nil)
+	app := httpapi.New(
+		f.service,
+		f.store.Ping,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		timeouts.DefaultHTTP,
+		nil,
+	)
 	token := ""
 	request := func(method, path, body string, status int) map[string]any {
 		t.Helper()
@@ -626,20 +714,39 @@ func TestHTTPFullLifecycle(t *testing.T) {
 		t.Fatal(search)
 	}
 
-	action := request("POST", "/v1/pending-actions", fmt.Sprintf(`{"operation":"create_appointment","category":"exam","slot_id":"%s"}`, slot), 201)
+	action := request(
+		"POST",
+		"/v1/pending-actions",
+		fmt.Sprintf(`{"operation":"create_appointment","category":"exam","slot_id":"%s"}`, slot),
+		201,
+	)
 	if !strings.Contains(action["summary"].(string), "Dra. Ana Silva") {
 		t.Fatal("missing confirmation summary")
 	}
 
 	appointment := request("POST", "/v1/pending-actions/"+action["id"].(string)+"/confirm", "", 200)
 
-	move := request("POST", "/v1/pending-actions", fmt.Sprintf(`{"operation":"reschedule_appointment","appointment_id":"%s","slot_id":"%s"}`, appointment["id"], next), 201)
+	move := request(
+		"POST",
+		"/v1/pending-actions",
+		fmt.Sprintf(
+			`{"operation":"reschedule_appointment","appointment_id":"%s","slot_id":"%s"}`,
+			appointment["id"],
+			next,
+		),
+		201,
+	)
 	moved := request("POST", "/v1/pending-actions/"+move["id"].(string)+"/confirm", `{}`, 200)
 	if moved["slot_id"] != next.String() || moved["category"] != "exam" {
 		t.Fatal(moved)
 	}
 
-	cancel := request("POST", "/v1/pending-actions", fmt.Sprintf(`{"operation":"cancel_appointment","appointment_id":"%s"}`, appointment["id"]), 201)
+	cancel := request(
+		"POST",
+		"/v1/pending-actions",
+		fmt.Sprintf(`{"operation":"cancel_appointment","appointment_id":"%s"}`, appointment["id"]),
+		201,
+	)
 
 	cancelled := request("POST", "/v1/pending-actions/"+cancel["id"].(string)+"/confirm", "", 200)
 	if cancelled["status"] != "cancelled" {

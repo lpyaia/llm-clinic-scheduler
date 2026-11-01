@@ -1,0 +1,23 @@
+name: Formatting
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  style:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Check text line length and JSON formatting
+        run: go run ./cmd/stylecheck
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.14.0
+          args: --timeout=5m

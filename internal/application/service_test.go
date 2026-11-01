@@ -21,7 +21,8 @@ type searchRepo struct {
 
 func (r *searchRepo) Slots(_ context.Context, f SlotFilter) ([]domain.Slot, error) {
 	r.filters = append(r.filters, f)
-	if !r.availableAt.IsZero() && (r.availableAt.After(f.From) || r.availableAt.Equal(f.From)) && r.availableAt.Before(f.To) {
+	if !r.availableAt.IsZero() && (r.availableAt.After(f.From) || r.availableAt.Equal(f.From)) &&
+		r.availableAt.Before(f.To) {
 		return []domain.Slot{{ID: uuid.New(), StartsAt: r.availableAt}}, nil
 	}
 
@@ -36,7 +37,43 @@ func TestProgressiveSearch(t *testing.T) {
 		day, calls, weeks int
 		explicit          bool
 	}{
-		{"initial", 5, 1, 2, false}, {"expand", 22, 3, 4, false}, {"empty", 0, 7, 8, false}, {"last week", 55, 7, 8, false}, {"outside horizon", 56, 7, 8, false}, {"explicit", 22, 1, 1, true},
+		{
+			"initial",
+			5,
+			1,
+			2,
+			false,
+		}, {
+			"expand",
+			22,
+			3,
+			4,
+			false,
+		}, {
+			"empty",
+			0,
+			7,
+			8,
+			false,
+		}, {
+			"last week",
+			55,
+			7,
+			8,
+			false,
+		}, {
+			"outside horizon",
+			56,
+			7,
+			8,
+			false,
+		}, {
+			"explicit",
+			22,
+			1,
+			1,
+			true,
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			r := &searchRepo{}

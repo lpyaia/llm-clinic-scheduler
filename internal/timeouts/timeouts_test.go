@@ -15,7 +15,15 @@ func TestLoad(t *testing.T) {
 	}{
 		{name: "defaults", want: Config{HTTPRequest: DefaultHTTP, Command: DefaultCommand}},
 		{name: "debug", http: "0s", command: "0s", want: Config{}},
-		{name: "custom", http: "30s", command: "5m", want: Config{HTTPRequest: 30 * time.Second, Command: 5 * time.Minute}},
+		{
+			name:    "custom",
+			http:    "30s",
+			command: "5m",
+			want: Config{
+				HTTPRequest: 30 * time.Second,
+				Command:     5 * time.Minute,
+			},
+		},
 		{name: "invalid HTTP", http: "invalid", invalidVariable: "HTTP_REQUEST_TIMEOUT"},
 		{name: "negative HTTP", http: "-1s", invalidVariable: "HTTP_REQUEST_TIMEOUT"},
 		{name: "invalid command", command: "invalid", invalidVariable: "COMMAND_TIMEOUT"},
