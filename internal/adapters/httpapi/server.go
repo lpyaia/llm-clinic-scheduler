@@ -135,17 +135,34 @@ func New(service *application.Service, ping func(context.Context) error, logger 
 	})
 	v1.Post("/agent/messages", func(c fiber.Ctx) error {
 		var in struct {
-			Message string `json:"message"`
+			Message        string          `json:"message"`
+			ConversationID json.RawMessage `json:"conversation_id"`
 		}
 		if err := decode(c, &in); err != nil {
 			return err
+		}
+
+		id := uuid.Nil
+
+		if in.ConversationID != nil {
+			var raw string
+			if err := json.Unmarshal(in.ConversationID, &raw); err != nil {
+				return domain.Failure("INVALID_INPUT", "Identificador de conversa inválido.")
+			}
+
+			parsed, err := requiredID(raw)
+			if err != nil {
+				return err
+			}
+
+			id = parsed
 		}
 
 		if assistant == nil {
 			return domain.Failure("AGENT_UNAVAILABLE", "O assistente não está configurado.")
 		}
 
-		out, err := assistant.Reply(c.Context(), principal(c), in.Message)
+		out, err := assistant.ReplyConversation(c.Context(), principal(c), id, in.Message)
 		if err != nil {
 			return err
 		}

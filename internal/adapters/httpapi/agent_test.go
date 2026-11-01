@@ -53,6 +53,56 @@ func (r conversationRepo) Appointments(_ context.Context, patientID uuid.UUID, _
 	return []domain.Appointment{{ID: patientID, PatientID: patientID, DoctorName: name, Category: "consultation", Status: domain.Scheduled, StartsAt: clock{}.Now()}}, nil
 }
 
+func TestConversationFollowUpRequiresOwnerAndValidID(t *testing.T) {
+	core := &application.Service{Repo: conversationRepo{first: uuid.New(), second: uuid.New()}, Clock: clock{}, Location: time.UTC}
+	model := conversationalModel(func(context.Context, agent.Request) (agent.Response, error) {
+		return agent.Response{ToolCalls: []agent.ToolCall{{ID: "search", Name: "find_available_slots", Arguments: json.RawMessage(`{}`)}}}, nil
+	})
+	app := New(core, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), time.Second, agent.New(core, model))
+	request := func(body, token string, status int) agent.Result {
+		t.Helper()
+
+		req := httptest.NewRequest("POST", "/v1/agent/messages", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+strings.Repeat(token, 64))
+
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		defer func() { _ = resp.Body.Close() }()
+
+		payload, err := io.ReadAll(resp.Body)
+		if err != nil || resp.StatusCode != status {
+			t.Fatalf("status=%d expected=%d body=%s err=%v", resp.StatusCode, status, payload, err)
+		}
+
+		var out agent.Result
+		if status == 200 && json.Unmarshal(payload, &out) != nil {
+			t.Fatal("invalid result")
+		}
+
+		return out
+	}
+
+	first := request(`{"message":"Quero horários"}`, "a", 200)
+	if first.ConversationID == uuid.Nil {
+		t.Fatal("missing conversation ID")
+	}
+
+	followUp := fmt.Sprintf(`{"message":"À tarde","conversation_id":%q}`, first.ConversationID)
+	if out := request(followUp, "a", 200); out.ConversationID != first.ConversationID {
+		t.Fatal("conversation changed")
+	}
+
+	request(followUp, "b", 404)
+	request(fmt.Sprintf(`{"message":"À tarde","conversation_id":%q}`, uuid.New()), "a", 404)
+	request(`{"message":"À tarde","conversation_id":"invalid"}`, "a", 400)
+	request(`{"message":"À tarde","conversation_id":"00000000-0000-0000-0000-000000000000"}`, "a", 400)
+	request(`{"message":"À tarde","conversation_id":null}`, "a", 400)
+}
+
 func TestConversationUsesOnlyAuthenticatedPatient(t *testing.T) {
 	core := &application.Service{Repo: conversationRepo{first: uuid.New(), second: uuid.New()}, Clock: clock{}, Location: time.UTC}
 	model := conversationalModel(func(_ context.Context, in agent.Request) (agent.Response, error) {

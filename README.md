@@ -203,8 +203,11 @@ Cobertura funcional: disputa por slot, limite semanal concorrente, confirmação
 
 ## Próximas fases
 
-O primeiro fluxo da V2 já está disponível: [consulta conversacional de agendamentos](docs/agent-local.md).
+Os primeiros fluxos da V2 já estão disponíveis: [consultas e busca conversacional de horários](docs/agent-local.md).
 `POST /v1/agent/messages` recebe uma mensagem em português e usa a sessão existente.
+Retorne o `conversation_id` recebido para preservar preferências e histórico em memória.
+Buscas resolvem nomes pelo catálogo, convertem datas relativas no fuso da clínica e
+reutilizam a disponibilidade determinística; nomes ambíguos geram esclarecimento.
 O adapter OpenAI é opcional: configure `OPENAI_API_KEY` para habilitá-lo e
 `OPENAI_MODEL` para escolher um modelo compatível com Chat Completions, tools e
 Structured Outputs (padrão `gpt-4.1-mini`). Sem chave, apenas essa rota retorna

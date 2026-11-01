@@ -1,4 +1,4 @@
-# Consulta conversacional de agendamentos — ticket #7
+# Consultas e busca conversacional de horários — tickets #7 e #10
 
 O paciente autenticado consulta seus agendamentos em português por
 `POST /v1/agent/messages`. A ferramenta `list_appointments` reutiliza
@@ -44,8 +44,43 @@ a identidade. Nem o corpo HTTP nem os argumentos da ferramenta aceitam
 4. Perguntas como “Liste meus agendamentos cancelados” usam o filtro de status.
    A ferramenta aceita `status` (`scheduled`, `cancelled`, `completed` ou vazio
    para todos), `from` e `to` (RFC 3339, intervalo `[from,to)`). Valores nulos ou
-   ausentes usam `scheduled` e não restringem datas. Datas relativas e memória
-   entre mensagens fazem parte de tickets seguintes; use datas explícitas aqui.
+   ausentes usam `scheduled` e não restringem datas.
+
+5. Para buscar disponibilidade, envie “Quero cardiologia semana que vem à tarde”.
+   Guarde o `conversation_id` retornado e inclua-o nas próximas mensagens:
+
+   ```powershell
+   $question = @{ message = 'Quero cardiologia semana que vem à tarde' } | ConvertTo-Json
+   $reply = Invoke-RestMethod "$base/v1/agent/messages" -Method Post -Headers $headers -ContentType 'application/json; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($question))
+   $question = @{ conversation_id = $reply.conversation_id; message = 'Depois de terça' } | ConvertTo-Json
+   $reply = Invoke-RestMethod "$base/v1/agent/messages" -Method Post -Headers $headers -ContentType 'application/json; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($question))
+   $question = @{ conversation_id = $reply.conversation_id; message = 'Prefiro de manhã' } | ConvertTo-Json
+   Invoke-RestMethod "$base/v1/agent/messages" -Method Post -Headers $headers -ContentType 'application/json; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($question))
+   ```
+
+   Use nomes presentes no catálogo local (`GET /v1/doctors` e `/v1/specialties`).
+   Nomes ausentes, desconhecidos ou ambíguos geram perguntas; as outras preferências
+   são preservadas durante o esclarecimento. Campos `null` da ferramenta preservam
+   preferências; strings vazias removem a preferência anterior. Mudanças explícitas
+   substituem o valor anterior. Não há reserva nem mutação ao buscar horários.
+
+   A ferramenta `find_available_slots` aceita nomes `doctor` e `specialty`,
+   `period`, `date`, `from` e `to`; não aceita IDs de paciente ou de catálogo.
+   O modelo traduz português para esses argumentos. O servidor converte `today`,
+   `tomorrow`, `this_week`, `next_week`, `after_monday` até `after_sunday` e
+   `earliest` usando o relógio injetado e o fuso da clínica. Semanas são de segunda
+   a segunda (fim exclusivo); “depois de terça” começa na quarta-feira, usando a
+   semana já escolhida ou a próxima ocorrência futura. `earliest` remove limites
+   de data para buscar a primeira janela com disponibilidade. Datas explícitas usam
+   `from`/`to` RFC 3339. Preferências de data são armazenadas como instantes, sem
+   reinterpretar “semana que vem” a cada mensagem.
+
+   `application.Service.FindSlots` mantém a política existente: sem fim explícito,
+   busca duas semanas e amplia até oito; com fim explícito, não amplia. O objeto
+   `availability` contém apenas slots reais, `searched_from`, `searched_until` e
+   `expanded`. A mensagem também informa o intervalo e a ausência de resultados.
+   A busca termina na ferramenta e o servidor monta a resposta. Para iniciar outra
+   conversa, omita o ID.
 
 ## Execução e proteção dos resultados
 
@@ -64,14 +99,23 @@ ordem. O servidor verifica essa lista e monta a mensagem em português com os
 dados reais, inclusive a ausência de resultados. O resultado da ferramenta e a
 resposta HTTP omitem identidade, telefone e outros campos desnecessários.
 
-O histórico existe somente durante a requisição. O timeout HTTP configurado se
+`agent.ConversationStore` abstrai armazenamento e atualização atômica de estado e
+histórico. A implementação em memória isola por ID e paciente, serializa mensagens
+da mesma conversa, respeita cancelamento ao esperar e só grava alterações após
+sucesso. Conversas distintas podem avançar em paralelo. O histórico conserva as
+últimas dez interações completas; preferências estruturadas permanecem. Reiniciar
+o processo perde as conversas, e IDs antigos retornam `NOT_FOUND` (404). Esta fase
+não oferece memória compartilhada entre instâncias nem persistência em banco.
+
+O timeout HTTP configurado se
 propaga ao modelo e ao banco; o cliente do fornecedor também limita cada chamada
 a 30 segundos, inclusive quando o timeout HTTP está desabilitado para debug.
 Respostas do fornecedor têm limite de 1 MiB e 2048 tokens de saída. O adapter
 envia `store: false`. A mensagem do paciente e os dados da consulta são enviados
 ao fornecedor configurado; use dados fictícios no roteiro local. Logs HTTP não
-registram esse conteúdo nem a chave. Uma interação bem-sucedida normalmente usa
-duas chamadas de API e está sujeita à cobrança da conta do fornecedor.
+registram esse conteúdo nem a chave. Uma busca de horários usa uma chamada de API;
+consultar agendamentos normalmente usa duas. Ambas estão sujeitas à cobrança da
+conta do fornecedor.
 
 Erros mantêm o envelope HTTP existente: `INVALID_INPUT` (400), `UNAUTHORIZED`
 (401), `MODEL_INVALID_RESPONSE` ou `AGENT_STEP_LIMIT` (502), `AGENT_UNAVAILABLE`
