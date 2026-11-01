@@ -38,12 +38,17 @@ func provider(t *testing.T, handler http.HandlerFunc) *openai.Client {
 		t.Fatal(err)
 	}
 
-	return &openai.Client{APIKey: "test-key", Model: "test-model", HTTPClient: &http.Client{Transport: localTransport{target: target}}}
+	return &openai.Client{
+		APIKey:     "test-key",
+		Model:      "test-model",
+		HTTPClient: &http.Client{Transport: localTransport{target: target}},
+	}
 }
 
 func TestProviderTranslatesToolCallsAndStructuredResponses(t *testing.T) {
 	client := provider(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" || r.URL.Path != "/v1/chat/completions" || r.Header.Get("Authorization") != "Bearer test-key" {
+		if r.Method != "POST" || r.URL.Path != "/v1/chat/completions" ||
+			r.Header.Get("Authorization") != "Bearer test-key" {
 			t.Error("invalid provider request")
 		}
 
@@ -74,7 +79,12 @@ func TestProviderTranslatesToolCallsAndStructuredResponses(t *testing.T) {
 			t.Error(err)
 		}
 
-		if in.Model != "test-model" || in.Parallel || in.Store || len(in.Tools) != 1 || in.Tools[0].Type != "function" || in.Tools[0].Function.Name != "list_appointments" || !in.Tools[0].Function.Strict || in.ResponseFormat.Type != "json_schema" || !in.ResponseFormat.Schema.Strict {
+		if in.Model != "test-model" || in.Parallel || in.Store || len(in.Tools) != 1 ||
+			in.Tools[0].Type != "function" ||
+			in.Tools[0].Function.Name != "list_appointments" ||
+			!in.Tools[0].Function.Strict ||
+			in.ResponseFormat.Type != "json_schema" ||
+			!in.ResponseFormat.Schema.Strict {
 			t.Errorf("incorrect protocol mapping: %+v", in)
 		}
 
@@ -83,7 +93,32 @@ func TestProviderTranslatesToolCallsAndStructuredResponses(t *testing.T) {
 		}
 
 		if in.Messages[len(in.Messages)-1].Role == "user" {
-			_, _ = io.WriteString(w, `{"choices":[{"finish_reason":"tool_calls","message":{"role":"assistant","content":null,"tool_calls":[{"id":"call-1","type":"function","function":{"name":"list_appointments","arguments":"{}"}}]}}]}`)
+			_, _ = io.WriteString(
+				w,
+				`
+{
+  "choices": [
+    {
+      "finish_reason": "tool_calls",
+      "message": {
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [
+          {
+            "id": "call-1",
+            "type": "function",
+            "function": {
+              "name": "list_appointments",
+              "arguments": "{}"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
+`,
+			)
 
 			return
 		}
@@ -92,16 +127,45 @@ func TestProviderTranslatesToolCallsAndStructuredResponses(t *testing.T) {
 			t.Error("tool result lost its call identifier")
 		}
 
-		_, _ = io.WriteString(w, `{"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"{\"appointment_ids\":[]}"}}]}`)
+		_, _ = io.WriteString(
+			w,
+			`
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "{\"appointment_ids\":[]}"
+      }
+    }
+  ]
+}
+`,
+		)
 	})
-	in := agent.Request{Messages: []agent.Message{{Role: "user", Content: "Meus agendamentos"}}, Tools: []agent.Tool{{Name: "list_appointments", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)}}, ResponseSchema: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)}
+	in := agent.Request{
+		Messages: []agent.Message{{Role: "user", Content: "Meus agendamentos"}},
+		Tools: []agent.Tool{
+			{
+				Name:       "list_appointments",
+				Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`),
+			},
+		},
+		ResponseSchema: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`),
+	}
 
 	first, err := client.Complete(context.Background(), in)
-	if err != nil || len(first.ToolCalls) != 1 || first.ToolCalls[0].Name != "list_appointments" || string(first.ToolCalls[0].Arguments) != "{}" {
+	if err != nil || len(first.ToolCalls) != 1 || first.ToolCalls[0].Name != "list_appointments" ||
+		string(first.ToolCalls[0].Arguments) != "{}" {
 		t.Fatalf("first=%+v error=%v", first, err)
 	}
 
-	in.Messages = append(in.Messages, agent.Message{Role: "assistant", ToolCalls: first.ToolCalls}, agent.Message{Role: "tool", ToolCallID: "call-1", Content: "[]"})
+	in.Messages = append(
+		in.Messages,
+		agent.Message{Role: "assistant", ToolCalls: first.ToolCalls},
+		agent.Message{Role: "tool", ToolCallID: "call-1", Content: "[]"},
+	)
 	last, err := client.Complete(context.Background(), in)
 	if err != nil || string(last.Content) != `{"appointment_ids":[]}` {
 		t.Fatalf("last=%+v error=%v", last, err)
@@ -121,15 +185,60 @@ func TestGPT6LunaCanCallToolsThroughChatCompletions(t *testing.T) {
 		// GPT-6 Luna requires reasoning_effort=none for Chat Completions tool calling.
 		if request.Model != "gpt-6-luna" || request.ReasoningEffort != "none" {
 			w.WriteHeader(http.StatusBadRequest)
-			_, _ = io.WriteString(w, `{"error":{"type":"invalid_request_error","param":"reasoning_effort","message":"Tool calling requires reasoning_effort none."}}`)
+			_, _ = io.WriteString(
+				w,
+				`
+{
+  "error": {
+    "type": "invalid_request_error",
+    "param": "reasoning_effort",
+    "message": "Tool calling requires reasoning_effort none."
+  }
+}
+`,
+			)
 
 			return
 		}
 
-		_, _ = io.WriteString(w, `{"choices":[{"finish_reason":"tool_calls","message":{"role":"assistant","content":null,"tool_calls":[{"id":"call-1","type":"function","function":{"name":"list_appointments","arguments":"{}"}}]}}]}`)
+		_, _ = io.WriteString(
+			w,
+			`
+{
+  "choices": [
+    {
+      "finish_reason": "tool_calls",
+      "message": {
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [
+          {
+            "id": "call-1",
+            "type": "function",
+            "function": {
+              "name": "list_appointments",
+              "arguments": "{}"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
+`,
+		)
 	})
 	client.Model = "gpt-6-luna"
-	in := agent.Request{Messages: []agent.Message{{Role: "user", Content: "Meus agendamentos"}}, Tools: []agent.Tool{{Name: "list_appointments", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)}}, ResponseSchema: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)}
+	in := agent.Request{
+		Messages: []agent.Message{{Role: "user", Content: "Meus agendamentos"}},
+		Tools: []agent.Tool{
+			{
+				Name:       "list_appointments",
+				Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`),
+			},
+		},
+		ResponseSchema: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`),
+	}
 
 	out, err := client.Complete(context.Background(), in)
 	if err != nil || len(out.ToolCalls) != 1 || out.ToolCalls[0].Name != "list_appointments" {
@@ -143,8 +252,42 @@ func TestProviderRejectsMalformedOrIncompleteResponses(t *testing.T) {
 		`{"choices":[{"finish_reason":"length","message":{"role":"assistant","content":"{}"}}]}`,
 		`{"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"not JSON"}}]}`,
 		`{"choices":[{"finish_reason":"stop","message":{"role":"user","content":"{}"}}]}`,
-		`{"choices":[{"finish_reason":"stop","message":{"role":"assistant","refusal":"refused","content":"{}"}}]}`,
-		`{"choices":[{"finish_reason":"tool_calls","message":{"role":"assistant","tool_calls":[{"id":"call","type":"function","function":{"name":"list_appointments","arguments":"{"}}]}}]}`,
+		`
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "refusal": "refused",
+        "content": "{}"
+      }
+    }
+  ]
+}
+`,
+		`
+{
+  "choices": [
+    {
+      "finish_reason": "tool_calls",
+      "message": {
+        "role": "assistant",
+        "tool_calls": [
+          {
+            "id": "call",
+            "type": "function",
+            "function": {
+              "name": "list_appointments",
+              "arguments": "{"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
+`,
 		strings.Repeat(" ", 1024*1024+1),
 	} {
 		client := provider(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, payload) })

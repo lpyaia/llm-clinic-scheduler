@@ -10,4 +10,5 @@ Use these canonical role strings as repository labels.
 | Ready for human | `ready-for-human` | Requires human implementation |
 | Will not implement | `wontfix` | Will not be actioned |
 
-Reuse existing labels and create only missing ones. These labels are independent of Project status fields. A `ready-for-agent` ticket is actionable only after all its blockers are resolved.
+Reuse existing labels and create only missing ones. These labels are independent of Project status fields. A
+`ready-for-agent` ticket is actionable only after all its blockers are resolved.

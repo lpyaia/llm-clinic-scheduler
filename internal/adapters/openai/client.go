@@ -105,7 +105,15 @@ func (c *Client) Complete(ctx context.Context, in agent.Request) (agent.Response
 		request.Tools = append(request.Tools, struct {
 			Type     string   `json:"type"`
 			Function function `json:"function"`
-		}{Type: "function", Function: function{Name: tool.Name, Description: tool.Description, Parameters: tool.Parameters, Strict: true}})
+		}{
+			Type: "function",
+			Function: function{
+				Name:        tool.Name,
+				Description: tool.Description,
+				Parameters:  tool.Parameters,
+				Strict:      true,
+			},
+		})
 	}
 
 	body, err := json.Marshal(request)
@@ -113,7 +121,12 @@ func (c *Client) Complete(ctx context.Context, in agent.Request) (agent.Response
 		return agent.Response{}, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.openai.com/v1/chat/completions", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		"https://api.openai.com/v1/chat/completions",
+		bytes.NewReader(body),
+	)
 	if err != nil {
 		return agent.Response{}, err
 	}
@@ -164,16 +177,25 @@ func (c *Client) Complete(ctx context.Context, in agent.Request) (agent.Response
 	out := agent.Response{}
 
 	if len(choice.Message.ToolCalls) > 0 {
-		if choice.FinishReason != "tool_calls" || (choice.Message.Content != nil && strings.TrimSpace(*choice.Message.Content) != "") {
+		if choice.FinishReason != "tool_calls" ||
+			(choice.Message.Content != nil && strings.TrimSpace(*choice.Message.Content) != "") {
 			return agent.Response{}, malformed()
 		}
 
 		for _, call := range choice.Message.ToolCalls {
-			if call.Type != "function" || call.ID == "" || call.Function.Name == "" || !json.Valid([]byte(call.Function.Arguments)) {
+			if call.Type != "function" || call.ID == "" || call.Function.Name == "" ||
+				!json.Valid([]byte(call.Function.Arguments)) {
 				return agent.Response{}, malformed()
 			}
 
-			out.ToolCalls = append(out.ToolCalls, agent.ToolCall{ID: call.ID, Name: call.Function.Name, Arguments: json.RawMessage(call.Function.Arguments)})
+			out.ToolCalls = append(
+				out.ToolCalls,
+				agent.ToolCall{
+					ID:        call.ID,
+					Name:      call.Function.Name,
+					Arguments: json.RawMessage(call.Function.Arguments),
+				},
+			)
 		}
 
 		return out, nil

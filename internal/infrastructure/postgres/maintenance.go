@@ -17,7 +17,9 @@ func (s *Store) Seed(ctx context.Context, now time.Time, loc *time.Location) err
 		for i, name := range []string{"Cardiologia", "Clínica geral"} {
 			specialtyID := uuid.NewSHA1(uuid.NameSpaceDNS, []byte("clinic.specialty."+name))
 			doctorID := uuid.NewSHA1(uuid.NameSpaceDNS, []byte("clinic.doctor."+name))
-			if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&specialtyRow{ID: specialtyID, Name: name}).Error; err != nil {
+			if err := tx.Clauses(clause.OnConflict{DoNothing: true}).
+				Create(&specialtyRow{ID: specialtyID, Name: name}).
+				Error; err != nil {
 				return err
 			}
 
@@ -28,7 +30,9 @@ func (s *Store) Seed(ctx context.Context, now time.Time, loc *time.Location) err
 
 			specialtyID = specialty.ID
 			doctorName := []string{"Dra. Ana Silva", "Dr. Bruno Santos"}[i]
-			if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&doctorRow{ID: doctorID, Name: doctorName, SpecialtyID: specialtyID}).Error; err != nil {
+			if err := tx.Clauses(clause.OnConflict{DoNothing: true}).
+				Create(&doctorRow{ID: doctorID, Name: doctorName, SpecialtyID: specialtyID}).
+				Error; err != nil {
 				return err
 			}
 
@@ -42,7 +46,9 @@ func (s *Store) Seed(ctx context.Context, now time.Time, loc *time.Location) err
 				for _, hour := range []int{9, 10, 14, 15, 17} {
 					for _, minute := range []int{0, 30} {
 						start := time.Date(date.Year(), date.Month(), date.Day(), hour, minute, 0, 0, loc)
-						if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&slotRow{ID: uuid.New(), DoctorID: doctorID, StartsAt: start}).Error; err != nil {
+						if err := tx.Clauses(clause.OnConflict{DoNothing: true}).
+							Create(&slotRow{ID: uuid.New(), DoctorID: doctorID, StartsAt: start}).
+							Error; err != nil {
 							return err
 						}
 					}
@@ -77,7 +83,10 @@ func (s *Store) CompleteDue(ctx context.Context, now time.Time) (int64, error) {
 				return err
 			}
 
-			q := r.(*Store).db.WithContext(ctx).Exec("UPDATE appointments SET status = 'completed', version = version + 1 WHERE patient_id = ? AND status = 'scheduled' AND slot_id IN (SELECT id FROM slots WHERE starts_at + interval '30 minutes' <= ?)", patient, now)
+			q := r.(*Store).db.WithContext(ctx).
+				Exec("UPDATE appointments SET status = 'completed', version = version + 1 "+
+					"WHERE patient_id = ? AND status = 'scheduled' AND slot_id IN "+
+					"(SELECT id FROM slots WHERE starts_at + interval '30 minutes' <= ?)", patient, now)
 			total += q.RowsAffected
 
 			return q.Error

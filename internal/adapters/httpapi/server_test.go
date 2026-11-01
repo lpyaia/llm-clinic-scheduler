@@ -51,7 +51,15 @@ func TestHTTPValidationAndAuthorization(t *testing.T) {
 		{"no session", "GET", "/v1/appointments", "", "", 401, "UNAUTHORIZED"},
 		{"bad auth", "GET", "/v1/appointments", "", "Basic abc", 401, "UNAUTHORIZED"},
 		{"bad phone", "POST", "/v1/dev/sessions", `{"phone":"123"}`, "", 400, "INVALID_INPUT"},
-		{"unknown field", "POST", "/v1/dev/sessions", `{"phone":"+5511999999999","patient_id":"forged"}`, "", 400, "INVALID_INPUT"},
+		{
+			"unknown field",
+			"POST",
+			"/v1/dev/sessions",
+			`{"phone":"+5511999999999","patient_id":"forged"}`,
+			"",
+			400,
+			"INVALID_INPUT",
+		},
 		{"null", "POST", "/v1/dev/sessions", `null`, "", 400, "INVALID_INPUT"},
 		{"trailing json", "POST", "/v1/dev/sessions", `{} {}`, "", 400, "INVALID_INPUT"},
 		{"malformed", "POST", "/v1/dev/sessions", `{`, "", 400, "INVALID_INPUT"},
@@ -60,17 +68,63 @@ func TestHTTPValidationAndAuthorization(t *testing.T) {
 		{"zero specialty", "GET", "/v1/doctors?specialty_id=" + uuid.Nil.String(), "", "valid", 400, "INVALID_INPUT"},
 		{"malformed doctor", "GET", "/v1/slots?doctor_id=invalid", "", "valid", 400, "INVALID_INPUT"},
 		{"zero doctor", "GET", "/v1/slots?doctor_id=" + uuid.Nil.String(), "", "valid", 400, "INVALID_INPUT"},
-		{"malformed specialty", "GET", "/v1/slots?doctor_id=" + uuid.NewString() + "&specialty_id=invalid", "", "valid", 400, "INVALID_INPUT"},
+		{
+			"malformed specialty",
+			"GET",
+			"/v1/slots?doctor_id=" + uuid.NewString() + "&specialty_id=invalid",
+			"",
+			"valid",
+			400,
+			"INVALID_INPUT",
+		},
 		{"missing filters", "GET", "/v1/slots", "", "valid", 400, "INVALID_INPUT"},
 		{"status", "GET", "/v1/appointments?status=bad", "", "valid", 400, "INVALID_INPUT"},
 		{"action id", "GET", "/v1/pending-actions/bad", "", "valid", 400, "INVALID_INPUT"},
 		{"zero action", "GET", "/v1/pending-actions/" + uuid.Nil.String(), "", "valid", 400, "INVALID_INPUT"},
-		{"zero confirmation", "POST", "/v1/pending-actions/" + uuid.Nil.String() + "/confirm", "", "valid", 400, "INVALID_INPUT"},
-		{"malformed slot", "POST", "/v1/pending-actions", `{"operation":"create_appointment","slot_id":"invalid","category":"consultation"}`, "valid", 400, "INVALID_INPUT"},
-		{"zero slot", "POST", "/v1/pending-actions", `{"operation":"create_appointment","slot_id":"00000000-0000-0000-0000-000000000000","category":"consultation"}`, "valid", 400, "INVALID_INPUT"},
-		{"malformed appointment", "POST", "/v1/pending-actions", `{"operation":"cancel_appointment","appointment_id":"invalid"}`, "valid", 400, "INVALID_INPUT"},
+		{
+			"zero confirmation",
+			"POST",
+			"/v1/pending-actions/" + uuid.Nil.String() + "/confirm",
+			"",
+			"valid",
+			400,
+			"INVALID_INPUT",
+		},
+		{
+			"malformed slot",
+			"POST",
+			"/v1/pending-actions",
+			`{"operation":"create_appointment","slot_id":"invalid","category":"consultation"}`,
+			"valid",
+			400,
+			"INVALID_INPUT",
+		},
+		{"zero slot", "POST", "/v1/pending-actions", `
+{
+  "operation": "create_appointment",
+  "slot_id": "00000000-0000-0000-0000-000000000000",
+  "category": "consultation"
+}
+`, "valid", 400, "INVALID_INPUT"},
+		{
+			"malformed appointment",
+			"POST",
+			"/v1/pending-actions",
+			`{"operation":"cancel_appointment","appointment_id":"invalid"}`,
+			"valid",
+			400,
+			"INVALID_INPUT",
+		},
 		{"ownership", "GET", "/v1/pending-actions/" + uuid.NewString(), "", "valid", 404, "NOT_FOUND"},
-		{"confirm rejects overrides", "POST", "/v1/pending-actions/" + uuid.NewString() + "/confirm", `{"slot_id":"other"}`, "valid", 400, "INVALID_INPUT"},
+		{
+			"confirm rejects overrides",
+			"POST",
+			"/v1/pending-actions/" + uuid.NewString() + "/confirm",
+			`{"slot_id":"other"}`,
+			"valid",
+			400,
+			"INVALID_INPUT",
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			req := httptest.NewRequest(test.method, test.path, strings.NewReader(test.body))
@@ -116,7 +170,13 @@ func TestHTTPValidationAndAuthorization(t *testing.T) {
 }
 func TestHTTPDoesNotExposeInfrastructureErrors(t *testing.T) {
 	s := &application.Service{Repo: httpRepo{failed: true}, Clock: clock{}, Location: time.UTC}
-	app := New(s, func(context.Context) error { return errors.New("private diagnostic") }, slog.New(slog.NewTextHandler(io.Discard, nil)), timeouts.DefaultHTTP, nil)
+	app := New(
+		s,
+		func(context.Context) error { return errors.New("private diagnostic") },
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		timeouts.DefaultHTTP,
+		nil,
+	)
 
 	for _, path := range []string{"/v1/appointments", "/health/ready"} {
 		req := httptest.NewRequest("GET", path, nil)

@@ -64,13 +64,21 @@ func errorStatus(err error) (int, string, string) {
 	return 500, "INTERNAL_ERROR", "Não foi possível concluir a operação. Tente novamente."
 }
 
-func New(service *application.Service, ping func(context.Context) error, logger *slog.Logger, requestTimeout time.Duration, assistant *agent.Agent) *fiber.App {
-	app := fiber.New(fiber.Config{Immutable: true, BodyLimit: 64 * 1024, ErrorHandler: func(c fiber.Ctx, err error) error {
-		status, code, message := errorStatus(err)
-		id, _ := c.Locals(requestIDKey).(string)
+func New(
+	service *application.Service,
+	ping func(context.Context) error,
+	logger *slog.Logger,
+	requestTimeout time.Duration,
+	assistant *agent.Agent,
+) *fiber.App {
+	app := fiber.New(
+		fiber.Config{Immutable: true, BodyLimit: 64 * 1024, ErrorHandler: func(c fiber.Ctx, err error) error {
+			status, code, message := errorStatus(err)
+			id, _ := c.Locals(requestIDKey).(string)
 
-		return c.Status(status).JSON(errorDTO{Error: errorDetail{Code: code, Message: message, RequestID: id}})
-	}})
+			return c.Status(status).JSON(errorDTO{Error: errorDetail{Code: code, Message: message, RequestID: id}})
+		}},
+	)
 	app.Use(func(c fiber.Ctx) error {
 		id := uuid.NewString()
 		c.Locals(requestIDKey, id)
@@ -89,7 +97,21 @@ func New(service *application.Service, ping func(context.Context) error, logger 
 			status, code, _ = errorStatus(err)
 		}
 
-		logger.Info("http_request", "request_id", id, "method", c.Method(), "route", c.Route().Path, "status", status, "duration_ms", time.Since(start).Milliseconds(), "error_code", code)
+		logger.Info(
+			"http_request",
+			"request_id",
+			id,
+			"method",
+			c.Method(),
+			"route",
+			c.Route().Path,
+			"status",
+			status,
+			"duration_ms",
+			time.Since(start).Milliseconds(),
+			"error_code",
+			code,
+		)
 
 		return err
 	})
@@ -100,7 +122,15 @@ func New(service *application.Service, ping func(context.Context) error, logger 
 	app.Get("/health/ready", func(c fiber.Ctx) error {
 		if err := ping(c.Context()); err != nil {
 			id, _ := c.Locals(requestIDKey).(string)
-			return c.Status(503).JSON(errorDTO{Error: errorDetail{Code: "NOT_READY", Message: "Banco de dados indisponível.", RequestID: id}})
+
+			return c.Status(503).
+				JSON(errorDTO{
+					Error: errorDetail{
+						Code:      "NOT_READY",
+						Message:   "Banco de dados indisponível.",
+						RequestID: id,
+					},
+				})
 		}
 
 		return c.JSON(fiber.Map{"status": "ok"})
@@ -116,7 +146,16 @@ func New(service *application.Service, ping func(context.Context) error, logger 
 			return err
 		}
 
-		return c.Status(201).JSON(sessionDTO{Token: out.Token, ExpiresAt: out.ExpiresAt.In(service.Location), Patient: patientDTO{ID: out.Patient.ID, FullName: out.Patient.FullName, Phone: out.Patient.Phone}})
+		return c.Status(201).
+			JSON(sessionDTO{
+				Token:     out.Token,
+				ExpiresAt: out.ExpiresAt.In(service.Location),
+				Patient: patientDTO{
+					ID:       out.Patient.ID,
+					FullName: out.Patient.FullName,
+					Phone:    out.Patient.Phone,
+				},
+			})
 	})
 	v1 := app.Group("/v1", func(c fiber.Ctx) error {
 		parts := strings.Fields(c.Get("Authorization"))
@@ -221,14 +260,37 @@ func New(service *application.Service, ping func(context.Context) error, logger 
 			return err
 		}
 
-		found, err := service.FindSlots(c.Context(), application.SearchInput{DoctorID: doctorID, SpecialtyID: specialtyID, Period: c.Query("period"), From: from, To: to})
+		found, err := service.FindSlots(
+			c.Context(),
+			application.SearchInput{
+				DoctorID:    doctorID,
+				SpecialtyID: specialtyID,
+				Period:      c.Query("period"),
+				From:        from,
+				To:          to,
+			},
+		)
 		if err != nil {
 			return err
 		}
 
-		out := searchDTO{Slots: make([]slotDTO, 0, len(found.Slots)), SearchedFrom: found.From.In(service.Location), SearchedUntil: found.Until.In(service.Location), Expanded: found.Expanded}
+		out := searchDTO{
+			Slots:         make([]slotDTO, 0, len(found.Slots)),
+			SearchedFrom:  found.From.In(service.Location),
+			SearchedUntil: found.Until.In(service.Location),
+			Expanded:      found.Expanded,
+		}
 		for _, slot := range found.Slots {
-			out.Slots = append(out.Slots, slotDTO{ID: slot.ID, DoctorID: slot.DoctorID, DoctorName: slot.DoctorName, StartsAt: slot.StartsAt.In(service.Location), DurationMinutes: 30})
+			out.Slots = append(
+				out.Slots,
+				slotDTO{
+					ID:              slot.ID,
+					DoctorID:        slot.DoctorID,
+					DoctorName:      slot.DoctorName,
+					StartsAt:        slot.StartsAt.In(service.Location),
+					DurationMinutes: 30,
+				},
+			)
 		}
 
 		return c.JSON(out)
@@ -244,7 +306,11 @@ func New(service *application.Service, ping func(context.Context) error, logger 
 			return err
 		}
 
-		rows, err := service.ListAppointments(c.Context(), principal(c), application.AppointmentFilter{Status: c.Query("status"), From: from, To: to})
+		rows, err := service.ListAppointments(
+			c.Context(),
+			principal(c),
+			application.AppointmentFilter{Status: c.Query("status"), From: from, To: to},
+		)
 		if err != nil {
 			return err
 		}
@@ -272,7 +338,16 @@ func New(service *application.Service, ping func(context.Context) error, logger 
 			return err
 		}
 
-		a, err := service.Prepare(c.Context(), principal(c), application.PrepareInput{Operation: in.Operation, SlotID: slotID, AppointmentID: appointmentID, Category: in.Category})
+		a, err := service.Prepare(
+			c.Context(),
+			principal(c),
+			application.PrepareInput{
+				Operation:     in.Operation,
+				SlotID:        slotID,
+				AppointmentID: appointmentID,
+				Category:      in.Category,
+			},
+		)
 		if err != nil {
 			return err
 		}

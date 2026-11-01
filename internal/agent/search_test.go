@@ -54,7 +54,9 @@ func (r *catalogRepo) Slots(_ context.Context, f application.SlotFilter) ([]doma
 		}
 
 		hour := slot.StartsAt.Hour()
-		if !slot.StartsAt.Before(f.From) && slot.StartsAt.Before(f.To) && !slot.StartsAt.Before(f.Now) && hour >= f.MinHour && hour < f.MaxHour {
+		if !slot.StartsAt.Before(f.From) && slot.StartsAt.Before(f.To) && !slot.StartsAt.Before(f.Now) &&
+			hour >= f.MinHour &&
+			hour < f.MaxHour {
 			rows = append(rows, slot)
 		}
 	}
@@ -68,15 +70,28 @@ func searchFixture() (*application.Service, *catalogRepo) {
 	repo := &catalogRepo{
 		doctors:     []domain.Doctor{{ID: doctorID, SpecialtyID: specialtyID, Name: "Dra. Ana Souza"}},
 		specialties: []domain.Specialty{{ID: specialtyID, Name: "Cardiologia"}},
-		slots:       []domain.Slot{{ID: uuid.New(), DoctorID: doctorID, DoctorName: "Dra. Ana Souza", StartsAt: time.Date(2026, 11, 4, 14, 0, 0, 0, loc)}},
+		slots: []domain.Slot{
+			{
+				ID:         uuid.New(),
+				DoctorID:   doctorID,
+				DoctorName: "Dra. Ana Souza",
+				StartsAt:   time.Date(2026, 11, 4, 14, 0, 0, 0, loc),
+			},
+		},
 	}
 
-	return &application.Service{Repo: repo, Clock: searchClock{time.Date(2026, 11, 1, 1, 0, 0, 0, time.UTC)}, Location: loc}, repo
+	return &application.Service{
+		Repo:     repo,
+		Clock:    searchClock{time.Date(2026, 11, 1, 1, 0, 0, 0, time.UTC)},
+		Location: loc,
+	}, repo
 }
 
 func searchModel(args string) modelFunc {
 	return func(context.Context, agent.Request) (agent.Response, error) {
-		return agent.Response{ToolCalls: []agent.ToolCall{{ID: "search", Name: "find_available_slots", Arguments: json.RawMessage(args)}}}, nil
+		return agent.Response{
+			ToolCalls: []agent.ToolCall{{ID: "search", Name: "find_available_slots", Arguments: json.RawMessage(args)}},
+		}, nil
 	}
 }
 
@@ -84,7 +99,11 @@ func TestSearchNextWeekInClinicTimezone(t *testing.T) {
 	core, repo := searchFixture() // Clock is still Saturday in the clinic.
 	a := agent.New(core, searchModel(`{"specialty":"cardiologia","date":"next_week","period":"afternoon"}`))
 
-	out, err := a.Reply(context.Background(), domain.Principal{PatientID: uuid.New()}, "Cardiologia semana que vem à tarde")
+	out, err := a.Reply(
+		context.Background(),
+		domain.Principal{PatientID: uuid.New()},
+		"Cardiologia semana que vem à tarde",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +112,10 @@ func TestSearchNextWeekInClinicTimezone(t *testing.T) {
 		t.Fatalf("unexpected availability: %+v", out)
 	}
 
-	if out.Availability.From.Format(time.RFC3339) != "2026-11-02T00:00:00-03:00" || out.Availability.Until.Format(time.RFC3339) != "2026-11-09T00:00:00-03:00" || out.Availability.Expanded || !strings.Contains(out.Message, "04/11/2026 às 14:00") {
+	if out.Availability.From.Format(time.RFC3339) != "2026-11-02T00:00:00-03:00" ||
+		out.Availability.Until.Format(time.RFC3339) != "2026-11-09T00:00:00-03:00" ||
+		out.Availability.Expanded ||
+		!strings.Contains(out.Message, "04/11/2026 às 14:00") {
 		t.Fatalf("unexpected search window or rendering: %+v", out)
 	}
 }
@@ -108,7 +130,9 @@ func TestRepeatingWeekdayRefinementKeepsSelectedWeek(t *testing.T) {
 			args = `{"date":"after_tuesday"}`
 		}
 
-		return agent.Response{ToolCalls: []agent.ToolCall{{ID: "search", Name: "find_available_slots", Arguments: json.RawMessage(args)}}}, nil
+		return agent.Response{
+			ToolCalls: []agent.ToolCall{{ID: "search", Name: "find_available_slots", Arguments: json.RawMessage(args)}},
+		}, nil
 	})
 	a, p := agent.New(core, model), domain.Principal{PatientID: uuid.New()}
 
@@ -119,7 +143,8 @@ func TestRepeatingWeekdayRefinementKeepsSelectedWeek(t *testing.T) {
 
 	for range 2 {
 		out, err = a.ReplyConversation(context.Background(), p, out.ConversationID, "Depois de terça")
-		if err != nil || out.Availability == nil || out.Availability.From.Format(time.RFC3339) != "2026-11-04T00:00:00-03:00" {
+		if err != nil || out.Availability == nil ||
+			out.Availability.From.Format(time.RFC3339) != "2026-11-04T00:00:00-03:00" {
 			t.Fatalf("weekday refinement moved week: %+v err=%v", out, err)
 		}
 	}
@@ -138,7 +163,9 @@ func TestWeekdayRefinementDoesNotWidenExplicitInterval(t *testing.T) {
 			args = `{"date":"after_tuesday"}`
 		}
 
-		return agent.Response{ToolCalls: []agent.ToolCall{{ID: "search", Name: "find_available_slots", Arguments: json.RawMessage(args)}}}, nil
+		return agent.Response{
+			ToolCalls: []agent.ToolCall{{ID: "search", Name: "find_available_slots", Arguments: json.RawMessage(args)}},
+		}, nil
 	})
 	a, p := agent.New(core, model), domain.Principal{PatientID: uuid.New()}
 
@@ -153,7 +180,10 @@ func TestWeekdayRefinementDoesNotWidenExplicitInterval(t *testing.T) {
 		}
 
 		out, err := a.ReplyConversation(context.Background(), p, first.ConversationID, "Depois de terça")
-		if err != nil || out.Availability == nil || len(out.Availability.Slots) != 1 || out.Availability.Slots[0].ID != inside.ID || out.Availability.Expanded || out.Availability.Until.Format(time.RFC3339) != "2026-11-07T00:00:00-03:00" {
+		if err != nil || out.Availability == nil || len(out.Availability.Slots) != 1 ||
+			out.Availability.Slots[0].ID != inside.ID ||
+			out.Availability.Expanded ||
+			out.Availability.Until.Format(time.RFC3339) != "2026-11-07T00:00:00-03:00" {
 			t.Fatalf("refinement escaped selected interval: %+v err=%v", out, err)
 		}
 	}
@@ -176,7 +206,9 @@ func TestReplacingWeekdayPreferenceCanMoveEarlierWithinSelectedWeek(t *testing.T
 			args = `{"date":"after_tuesday"}`
 		}
 
-		return agent.Response{ToolCalls: []agent.ToolCall{{ID: "search", Name: "find_available_slots", Arguments: json.RawMessage(args)}}}, nil
+		return agent.Response{
+			ToolCalls: []agent.ToolCall{{ID: "search", Name: "find_available_slots", Arguments: json.RawMessage(args)}},
+		}, nil
 	})
 	a, p := agent.New(core, model), domain.Principal{PatientID: uuid.New()}
 
@@ -191,7 +223,8 @@ func TestReplacingWeekdayPreferenceCanMoveEarlierWithinSelectedWeek(t *testing.T
 	}
 
 	out, err = a.ReplyConversation(context.Background(), p, out.ConversationID, "Prefiro depois de terça")
-	if err != nil || out.Availability == nil || len(out.Availability.Slots) != 2 || out.Availability.From.Format(time.RFC3339) != "2026-11-04T00:00:00-03:00" {
+	if err != nil || out.Availability == nil || len(out.Availability.Slots) != 2 ||
+		out.Availability.From.Format(time.RFC3339) != "2026-11-04T00:00:00-03:00" {
 		t.Fatalf("replacement=%+v err=%v", out, err)
 	}
 }
@@ -208,7 +241,9 @@ func TestConversationRetainsAndReplacesSearchPreferences(t *testing.T) {
 		if step == 2 {
 			args = `{"date":"after_tuesday"}`
 
-			if !strings.Contains(in.Messages[0].Content, "Ana") || !strings.Contains(in.Messages[0].Content, "afternoon") || len(in.Messages) < 4 {
+			if !strings.Contains(in.Messages[0].Content, "Ana") ||
+				!strings.Contains(in.Messages[0].Content, "afternoon") ||
+				len(in.Messages) < 4 {
 				t.Fatal("missing structured preferences or history")
 			}
 		}
@@ -217,7 +252,9 @@ func TestConversationRetainsAndReplacesSearchPreferences(t *testing.T) {
 			args = `{"period":"morning"}`
 		}
 
-		return agent.Response{ToolCalls: []agent.ToolCall{{ID: "search", Name: "find_available_slots", Arguments: json.RawMessage(args)}}}, nil
+		return agent.Response{
+			ToolCalls: []agent.ToolCall{{ID: "search", Name: "find_available_slots", Arguments: json.RawMessage(args)}},
+		}, nil
 	})
 	a := agent.New(core, model)
 	p := domain.Principal{PatientID: uuid.New()}
@@ -233,12 +270,16 @@ func TestConversationRetainsAndReplacesSearchPreferences(t *testing.T) {
 	}
 
 	out, err = a.ReplyConversation(context.Background(), p, id, "Depois de terça")
-	if err != nil || out.Availability == nil || out.Availability.From.Format(time.RFC3339) != "2026-11-04T00:00:00-03:00" || out.Availability.Until.Format(time.RFC3339) != "2026-11-09T00:00:00-03:00" || len(out.Availability.Slots) != 1 {
+	if err != nil || out.Availability == nil ||
+		out.Availability.From.Format(time.RFC3339) != "2026-11-04T00:00:00-03:00" ||
+		out.Availability.Until.Format(time.RFC3339) != "2026-11-09T00:00:00-03:00" ||
+		len(out.Availability.Slots) != 1 {
 		t.Fatalf("refinement=%+v error=%v", out, err)
 	}
 
 	out, err = a.ReplyConversation(context.Background(), p, id, "Prefiro de manhã")
-	if err != nil || out.Availability == nil || len(out.Availability.Slots) != 1 || out.Availability.Slots[0].ID != morning.ID {
+	if err != nil || out.Availability == nil || len(out.Availability.Slots) != 1 ||
+		out.Availability.Slots[0].ID != morning.ID {
 		t.Fatalf("changed preference=%+v error=%v", out, err)
 	}
 }
@@ -253,7 +294,9 @@ func TestDateClarificationKeepsDoctorAndPeriod(t *testing.T) {
 			args = `{"date":"next_week"}`
 		}
 
-		return agent.Response{ToolCalls: []agent.ToolCall{{ID: "search", Name: "find_available_slots", Arguments: json.RawMessage(args)}}}, nil
+		return agent.Response{
+			ToolCalls: []agent.ToolCall{{ID: "search", Name: "find_available_slots", Arguments: json.RawMessage(args)}},
+		}, nil
 	})
 	a, p := agent.New(core, model), domain.Principal{PatientID: uuid.New()}
 
@@ -270,7 +313,10 @@ func TestDateClarificationKeepsDoctorAndPeriod(t *testing.T) {
 
 func TestCatalogAmbiguityRequiresClarificationAndRetainsDates(t *testing.T) {
 	core, repo := searchFixture()
-	repo.doctors = append(repo.doctors, domain.Doctor{ID: uuid.New(), SpecialtyID: repo.specialties[0].ID, Name: "Dra. Ana Lima"})
+	repo.doctors = append(
+		repo.doctors,
+		domain.Doctor{ID: uuid.New(), SpecialtyID: repo.specialties[0].ID, Name: "Dra. Ana Lima"},
+	)
 	step := 0
 	model := modelFunc(func(context.Context, agent.Request) (agent.Response, error) {
 		step++
@@ -279,12 +325,15 @@ func TestCatalogAmbiguityRequiresClarificationAndRetainsDates(t *testing.T) {
 			args = `{"doctor":"Doutora Ana Souza"}`
 		}
 
-		return agent.Response{ToolCalls: []agent.ToolCall{{ID: "search", Name: "find_available_slots", Arguments: json.RawMessage(args)}}}, nil
+		return agent.Response{
+			ToolCalls: []agent.ToolCall{{ID: "search", Name: "find_available_slots", Arguments: json.RawMessage(args)}},
+		}, nil
 	})
 	a, p := agent.New(core, model), domain.Principal{PatientID: uuid.New()}
 
 	first, err := a.Reply(context.Background(), p, "Ana semana que vem à tarde")
-	if err != nil || first.Availability != nil || !strings.Contains(first.Message, "Ana Souza") || !strings.Contains(first.Message, "Ana Lima") {
+	if err != nil || first.Availability != nil || !strings.Contains(first.Message, "Ana Souza") ||
+		!strings.Contains(first.Message, "Ana Lima") {
 		t.Fatalf("ambiguity=%+v error=%v", first, err)
 	}
 
@@ -304,20 +353,30 @@ func TestSearchRelativeDatesAndExplicitWindow(t *testing.T) {
 		{"this week", `{"date":"this_week"}`, "2026-10-31T22:00:00-03:00", "2026-11-02T00:00:00-03:00", false},
 		{"after Tuesday", `{"date":"after_tuesday"}`, "2026-11-04T00:00:00-03:00", "2026-12-30T00:00:00-03:00", true},
 		{"earliest", `{"date":"earliest"}`, "2026-10-31T22:00:00-03:00", "2026-12-26T22:00:00-03:00", true},
-		{"explicit", `{"from":"2026-11-02T00:00:00-03:00","to":"2026-11-03T00:00:00-03:00"}`, "2026-11-02T00:00:00-03:00", "2026-11-03T00:00:00-03:00", false},
+		{
+			"explicit",
+			`{"from":"2026-11-02T00:00:00-03:00","to":"2026-11-03T00:00:00-03:00"}`,
+			"2026-11-02T00:00:00-03:00",
+			"2026-11-03T00:00:00-03:00",
+			false,
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			core, repo := searchFixture()
 			repo.slots = nil
 			args := strings.Replace(test.args, `{`, `{"specialty":"Cardiologia",`, 1)
 
-			out, err := agent.New(core, searchModel(args)).Reply(context.Background(), domain.Principal{PatientID: uuid.New()}, test.name)
+			out, err := agent.New(core, searchModel(args)).
+				Reply(context.Background(), domain.Principal{PatientID: uuid.New()}, test.name)
 			if err != nil || out.Availability == nil {
 				t.Fatalf("result=%+v err=%v", out, err)
 			}
 
 			found := out.Availability
-			if found.From.Format(time.RFC3339) != test.from || found.Until.Format(time.RFC3339) != test.until || found.Expanded != test.expanded || len(found.Slots) != 0 || !strings.Contains(out.Message, "Não encontrei") {
+			if found.From.Format(time.RFC3339) != test.from || found.Until.Format(time.RFC3339) != test.until ||
+				found.Expanded != test.expanded ||
+				len(found.Slots) != 0 ||
+				!strings.Contains(out.Message, "Não encontrei") {
 				t.Fatalf("unexpected availability: %+v", found)
 			}
 		})
@@ -328,8 +387,12 @@ func TestSearchProgressiveWindowReturnsOnlyActualSlots(t *testing.T) {
 	core, repo := searchFixture()
 
 	repo.slots[0].StartsAt = time.Date(2026, 11, 24, 14, 0, 0, 0, core.Location)
-	out, err := agent.New(core, searchModel(`{"doctor":"Ana","date":"earliest"}`)).Reply(context.Background(), domain.Principal{PatientID: uuid.New()}, "Ana o mais cedo possível")
-	if err != nil || out.Availability == nil || !out.Availability.Expanded || out.Availability.Until.Format(time.RFC3339) != "2026-11-28T22:00:00-03:00" || len(out.Availability.Slots) != 1 || out.Availability.Slots[0].ID != repo.slots[0].ID {
+	out, err := agent.New(core, searchModel(`{"doctor":"Ana","date":"earliest"}`)).
+		Reply(context.Background(), domain.Principal{PatientID: uuid.New()}, "Ana o mais cedo possível")
+	if err != nil || out.Availability == nil || !out.Availability.Expanded ||
+		out.Availability.Until.Format(time.RFC3339) != "2026-11-28T22:00:00-03:00" ||
+		len(out.Availability.Slots) != 1 ||
+		out.Availability.Slots[0].ID != repo.slots[0].ID {
 		t.Fatalf("result=%+v err=%v", out, err)
 	}
 }
@@ -349,7 +412,8 @@ func TestSearchMissingUnknownNamesAndInvalidArguments(t *testing.T) {
 		t.Run(test.args, func(t *testing.T) {
 			core, _ := searchFixture()
 
-			out, err := agent.New(core, searchModel(test.args)).Reply(context.Background(), domain.Principal{PatientID: uuid.New()}, "Buscar horários")
+			out, err := agent.New(core, searchModel(test.args)).
+				Reply(context.Background(), domain.Principal{PatientID: uuid.New()}, "Buscar horários")
 			if test.code != "" {
 				if domain.ErrorCode(err) != test.code {
 					t.Fatalf("expected %s got %v", test.code, err)
@@ -374,11 +438,14 @@ func TestConversationStateAndHistoryAreIsolated(t *testing.T) {
 			args = `{"doctor":"Ana","date":"next_week"}`
 		}
 
-		if last == "Nova conversa" && (strings.Contains(in.Messages[0].Content, `"Doctor":"Ana"`) || len(in.Messages) != 2) {
+		if last == "Nova conversa" &&
+			(strings.Contains(in.Messages[0].Content, `"Doctor":"Ana"`) || len(in.Messages) != 2) {
 			t.Fatal("conversation state/history leaked")
 		}
 
-		return agent.Response{ToolCalls: []agent.ToolCall{{ID: "search", Name: "find_available_slots", Arguments: json.RawMessage(args)}}}, nil
+		return agent.Response{
+			ToolCalls: []agent.ToolCall{{ID: "search", Name: "find_available_slots", Arguments: json.RawMessage(args)}},
+		}, nil
 	})
 	a, p := agent.New(core, model), domain.Principal{PatientID: uuid.New()}
 
@@ -387,7 +454,12 @@ func TestConversationStateAndHistoryAreIsolated(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = a.ReplyConversation(context.Background(), domain.Principal{PatientID: uuid.New()}, first.ConversationID, "Invadir")
+	_, err = a.ReplyConversation(
+		context.Background(),
+		domain.Principal{PatientID: uuid.New()},
+		first.ConversationID,
+		"Invadir",
+	)
 	if domain.ErrorCode(err) != "NOT_FOUND" {
 		t.Fatalf("cross-patient access: %v", err)
 	}
@@ -402,7 +474,8 @@ func TestConversationStateAndHistoryAreIsolated(t *testing.T) {
 	core.Clock = searchClock{time.Date(2026, 11, 3, 12, 0, 0, 0, core.Location)}
 
 	out, err := a.ReplyConversation(context.Background(), p, first.ConversationID, "À tarde")
-	if err != nil || out.Availability == nil || out.Availability.Until.Format(time.RFC3339) != "2026-11-09T00:00:00-03:00" {
+	if err != nil || out.Availability == nil ||
+		out.Availability.Until.Format(time.RFC3339) != "2026-11-09T00:00:00-03:00" {
 		t.Fatalf("relative date was reinterpreted: %+v err=%v", out, err)
 	}
 }
@@ -423,10 +496,22 @@ func TestFailedTurnDoesNotChangeConversation(t *testing.T) {
 				}
 			}
 
-			return agent.Response{ToolCalls: []agent.ToolCall{{ID: "search", Name: "find_available_slots", Arguments: json.RawMessage(`{}`)}}}, nil
+			return agent.Response{
+				ToolCalls: []agent.ToolCall{
+					{ID: "search", Name: "find_available_slots", Arguments: json.RawMessage(`{}`)},
+				},
+			}, nil
 		}
 
-		return agent.Response{ToolCalls: []agent.ToolCall{{ID: "search", Name: "find_available_slots", Arguments: json.RawMessage(`{"doctor":"Ana","period":"afternoon","date":"next_week"}`)}}}, nil
+		return agent.Response{
+			ToolCalls: []agent.ToolCall{
+				{
+					ID:        "search",
+					Name:      "find_available_slots",
+					Arguments: json.RawMessage(`{"doctor":"Ana","period":"afternoon","date":"next_week"}`),
+				},
+			},
+		}, nil
 	})
 	a, p := agent.New(core, model), domain.Principal{PatientID: uuid.New()}
 
@@ -457,7 +542,9 @@ func TestBusyConversationHonorsCancellationAndDoesNotBlockOthers(t *testing.T) {
 			<-release
 		}
 
-		return agent.Response{ToolCalls: []agent.ToolCall{{ID: "search", Name: "find_available_slots", Arguments: json.RawMessage(`{}`)}}}, nil
+		return agent.Response{
+			ToolCalls: []agent.ToolCall{{ID: "search", Name: "find_available_slots", Arguments: json.RawMessage(`{}`)}},
+		}, nil
 	})
 	a, p := agent.New(core, model), domain.Principal{PatientID: uuid.New()}
 

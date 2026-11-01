@@ -38,7 +38,12 @@ type Availability struct {
 }
 
 func searchTool() Tool {
-	return Tool{Name: "find_available_slots", Description: "Busca horários reais por nome de médico/especialidade e atualiza preferências. null ou campo ausente preserva; string vazia limpa. Não aceita IDs.", Parameters: json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"doctor":{"type":["string","null"]},"specialty":{"type":["string","null"]},"period":{"type":["string","null"],"enum":["morning","afternoon","evening","",null]},"date":{"type":["string","null"],"enum":["today","tomorrow","this_week","next_week","earliest","after_monday","after_tuesday","after_wednesday","after_thursday","after_friday","after_saturday","after_sunday","clarify","",null]},"from":{"type":["string","null"],"description":"Início inclusivo RFC3339. String vazia limpa."},"to":{"type":["string","null"],"description":"Fim exclusivo RFC3339. String vazia limpa."}},"required":["doctor","specialty","period","date","from","to"]}`)}
+	return Tool{
+		Name: "find_available_slots",
+		Description: "Busca horários reais por nome de médico/especialidade e atualiza preferências. " +
+			"null ou campo ausente preserva; string vazia limpa. Não aceita IDs.",
+		Parameters: json.RawMessage(findAvailableSlotsSchema),
+	}
 }
 
 func clarification(message string) Result {
@@ -114,12 +119,23 @@ func (a *Agent) search(ctx context.Context, raw json.RawMessage, preferences *Se
 	if doctorID != uuid.Nil && specialtyID != uuid.Nil {
 		for _, doctor := range doctors {
 			if doctor.ID == doctorID && doctor.SpecialtyID != specialtyID {
-				return clarification("O médico escolhido não atende a especialidade informada. Qual preferência deseja alterar?"), nil
+				return clarification(
+					"O médico escolhido não atende a especialidade informada. Qual preferência deseja alterar?",
+				), nil
 			}
 		}
 	}
 
-	found, err := a.core.FindSlots(ctx, application.SearchInput{DoctorID: doctorID, SpecialtyID: specialtyID, Period: next.Period, From: next.From, To: next.To})
+	found, err := a.core.FindSlots(
+		ctx,
+		application.SearchInput{
+			DoctorID:    doctorID,
+			SpecialtyID: specialtyID,
+			Period:      next.Period,
+			From:        next.From,
+			To:          next.To,
+		},
+	)
 	if err != nil {
 		if domain.ErrorCode(err) == "INVALID_INPUT" {
 			return clarification("Informe um intervalo futuro de até oito semanas."), nil
@@ -128,7 +144,12 @@ func (a *Agent) search(ctx context.Context, raw json.RawMessage, preferences *Se
 		return Result{}, err
 	}
 
-	availability := &Availability{Slots: make([]Slot, 0, len(found.Slots)), From: found.From, Until: found.Until, Expanded: found.Expanded}
+	availability := &Availability{
+		Slots:    make([]Slot, 0, len(found.Slots)),
+		From:     found.From,
+		Until:    found.Until,
+		Expanded: found.Expanded,
+	}
 
 	var message strings.Builder
 	if len(found.Slots) == 0 {
@@ -137,7 +158,12 @@ func (a *Agent) search(ctx context.Context, raw json.RawMessage, preferences *Se
 		message.WriteString("Horários disponíveis")
 	}
 
-	fmt.Fprintf(&message, " no intervalo de %s até %s (fim exclusivo):", found.From.Format("02/01/2006 às 15:04 -07:00"), found.Until.Format("02/01/2006 às 15:04 -07:00"))
+	fmt.Fprintf(
+		&message,
+		" no intervalo de %s até %s (fim exclusivo):",
+		found.From.Format("02/01/2006 às 15:04 -07:00"),
+		found.Until.Format("02/01/2006 às 15:04 -07:00"),
+	)
 
 	if found.Expanded {
 		message.WriteString(" Busca ampliada automaticamente.")
@@ -172,7 +198,15 @@ func (a *Agent) searchDates(next *SearchPreferences, date, from, to *string) err
 			next.From, next.To = start, start.AddDate(0, 0, 7)
 		default:
 			weekdayRefinement = true
-			weekdays := map[string]time.Weekday{"after_monday": time.Monday, "after_tuesday": time.Tuesday, "after_wednesday": time.Wednesday, "after_thursday": time.Thursday, "after_friday": time.Friday, "after_saturday": time.Saturday, "after_sunday": time.Sunday}
+			weekdays := map[string]time.Weekday{
+				"after_monday":    time.Monday,
+				"after_tuesday":   time.Tuesday,
+				"after_wednesday": time.Wednesday,
+				"after_thursday":  time.Thursday,
+				"after_friday":    time.Friday,
+				"after_saturday":  time.Saturday,
+				"after_sunday":    time.Sunday,
+			}
 
 			weekday, ok := weekdays[*date]
 			if !ok {
@@ -287,5 +321,9 @@ func resolveName(query, kind string, catalog map[uuid.UUID]string) (uuid.UUID, s
 
 	slices.Sort(names)
 
-	return uuid.Nil, fmt.Sprintf("Encontrei mais de uma opção de %s: %s. Qual você prefere?", kind, strings.Join(names, "; "))
+	return uuid.Nil, fmt.Sprintf(
+		"Encontrei mais de uma opção de %s: %s. Qual você prefere?",
+		kind,
+		strings.Join(names, "; "),
+	)
 }

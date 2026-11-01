@@ -62,8 +62,10 @@ CREATE TABLE pending_actions (
     expires_at timestamptz NOT NULL CHECK (expires_at > created_at),
     CHECK ((status = 'succeeded' AND result IS NOT NULL) OR (status <> 'succeeded' AND result IS NULL)),
     CHECK (
-        (operation = 'create_appointment' AND slot_id IS NOT NULL AND appointment_id IS NULL AND category IN ('consultation','exam','procedure') AND category IS NOT NULL)
-        OR (operation = 'reschedule_appointment' AND slot_id IS NOT NULL AND appointment_id IS NOT NULL AND category IS NULL)
+        (operation = 'create_appointment' AND slot_id IS NOT NULL AND appointment_id IS NULL
+            AND category IN ('consultation','exam','procedure') AND category IS NOT NULL)
+        OR (operation = 'reschedule_appointment' AND slot_id IS NOT NULL
+            AND appointment_id IS NOT NULL AND category IS NULL)
         OR (operation = 'cancel_appointment' AND slot_id IS NULL AND appointment_id IS NOT NULL AND category IS NULL)
     )
 );

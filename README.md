@@ -1,13 +1,16 @@
 # LLM Clinic Scheduler
 
-Backend de aprendizado para um assistente de pacientes. A fase 1 funciona integralmente sem IA: Go, Fiber v3, GORM, PostgreSQL 17 e migrations SQL com goose.
+Backend de aprendizado para um assistente de pacientes. A fase 1 funciona integralmente sem IA: Go, Fiber v3, GORM,
+PostgreSQL 17 e migrations SQL com goose.
 
-O backend protege disponibilidade, autorização, limite semanal e concorrência. Futuramente, o agente interpretará linguagem e chamará os mesmos casos de uso.
+O backend protege disponibilidade, autorização, limite semanal e concorrência. Futuramente, o agente interpretará
+linguagem e chamará os mesmos casos de uso.
 
 ## Documentação
 
 - [PRD original](docs/prd.md): requisitos de produto fornecidos para o projeto.
-- [Plano de desenvolvimento aprovado](docs/development-plan.md): roadmap, arquitetura com Fiber e GORM, regras, contratos e critérios de aceite.
+- [Plano de desenvolvimento aprovado](docs/development-plan.md): roadmap, arquitetura com Fiber e GORM, regras,
+  contratos e critérios de aceite.
 - [Contrato OpenAPI](api/openapi.yaml): especificação da API REST da fase 1.
 - [Swagger UI local](http://127.0.0.1:3000/docs): documentação interativa com execução de requisições.
 
@@ -24,9 +27,11 @@ go run ./cmd/clinic seed
 go run ./cmd/clinic serve
 ```
 
-A API escuta em `http://127.0.0.1:3000`. `migrate` aplica migrations pendentes; `seed` adiciona dois médicos e slots de dias úteis nas próximas oito semanas, sem duplicar dados em execuções repetidas.
+A API escuta em `http://127.0.0.1:3000`. `migrate` aplica migrations pendentes; `seed` adiciona dois médicos e slots de
+dias úteis nas próximas oito semanas, sem duplicar dados em execuções repetidas.
 
-O executável carrega automaticamente a `.env` da raiz antes de ler a configuração, inclusive ao executar de um subdiretório do repositório. Use [.env.example](.env.example) como modelo e edite a `.env` local:
+O executável carrega automaticamente a `.env` da raiz antes de ler a configuração, inclusive ao executar de um
+subdiretório do repositório. Use [.env.example](.env.example) como modelo e edite a `.env` local:
 
 ```dotenv
 DATABASE_URL=postgres://clinic:clinic@localhost:5432/clinic?sslmode=disable
@@ -37,11 +42,15 @@ HTTP_REQUEST_TIMEOUT=10s
 COMMAND_TIMEOUT=2m
 ```
 
-Variáveis já definidas no processo têm prioridade sobre a `.env`, preservando overrides do terminal, Docker e debugger. A aplicação também pode iniciar sem esse arquivo, usando as variáveis do ambiente e os valores padrão; os scripts de teste exigem a `.env`. Arquivos inválidos interrompem a inicialização. O arquivo não é incorporado ao binário nem à imagem Docker.
+Variáveis já definidas no processo têm prioridade sobre a `.env`, preservando overrides do terminal, Docker e debugger.
+A aplicação também pode iniciar sem esse arquivo, usando as variáveis do ambiente e os valores padrão; os scripts de
+teste exigem a `.env`. Arquivos inválidos interrompem a inicialização. O arquivo não é incorporado ao binário nem à
+imagem Docker.
 
 Para executar também a API em container:
 
-O serviço `api` está comentado no [compose.yaml](compose.yaml), mantendo apenas o PostgreSQL ativo por padrão para desenvolvimento e debug locais. Descomente esse serviço antes de executar os comandos abaixo.
+O serviço `api` está comentado no [compose.yaml](compose.yaml), mantendo apenas o PostgreSQL ativo por padrão para
+desenvolvimento e debug locais. Descomente esse serviço antes de executar os comandos abaixo.
 
 ```powershell
 docker compose build api
@@ -57,43 +66,63 @@ O comando de manutenção conclui agendamentos cujo término já passou:
 go run ./cmd/clinic complete-due
 ```
 
-As migrations são executadas explicitamente. Não há `AutoMigrate` na inicialização. O banco persiste no volume `postgres_data`; `docker compose stop` interrompe os serviços preservando os dados.
+As migrations são executadas explicitamente. Não há `AutoMigrate` na inicialização. O banco persiste no volume
+`postgres_data`; `docker compose stop` interrompe os serviços preservando os dados.
 
 ## Debugger no VS Code
 
-As configurações de [.vscode/launch.json](.vscode/launch.json) executam o pacote `cmd/clinic` com Delve e carregam as variáveis do mesmo arquivo `.env` da raiz. Crie-o a partir do exemplo caso ainda não exista:
+As configurações de [.vscode/launch.json](.vscode/launch.json) executam o pacote `cmd/clinic` com Delve e carregam as
+variáveis do mesmo arquivo `.env` da raiz. Crie-o a partir do exemplo caso ainda não exista:
 
 ```powershell
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 docker compose up -d --wait db
 ```
 
-Instale a extensão **Go** (`golang.go`), recomendada pelo workspace. Se o VS Code solicitar o debugger, instale `dlv` pela opção **Go: Install/Update Tools**.
+Instale a extensão **Go** (`golang.go`), recomendada pelo workspace. Se o VS Code solicitar o debugger, instale `dlv`
+pela opção **Go: Install/Update Tools**.
 
-Abra **Run and Debug** (`Ctrl+Shift+D`), selecione **Go: serve**, **Go: migrate** ou **Go: seed**, adicione seus breakpoints e pressione **F5**. Os três perfis executam Go localmente e usam o PostgreSQL exposto na porta 5432.
+Abra **Run and Debug** (`Ctrl+Shift+D`), selecione **Go: serve**, **Go: migrate** ou **Go: seed**, adicione seus
+breakpoints e pressione **F5**. Os três perfis executam Go localmente e usam o PostgreSQL exposto na porta 5432.
 
-No primeiro uso, execute **Go: migrate**, depois **Go: seed** e finalmente **Go: serve**. Os comandos `migrate` e `seed` encerram ao concluir. Para investigar esses comandos desde o início, coloque um breakpoint em `run`, no arquivo `cmd/clinic/main.go`; as migrations SQL são executadas pelo goose, sem breakpoints dentro do SQL.
+No primeiro uso, execute **Go: migrate**, depois **Go: seed** e finalmente **Go: serve**. Os comandos `migrate` e `seed`
+encerram ao concluir. Para investigar esses comandos desde o início, coloque um breakpoint em `run`, no arquivo
+`cmd/clinic/main.go`; as migrations SQL são executadas pelo goose, sem breakpoints dentro do SQL.
 
-Se a API já estiver executando no Docker, use `docker compose stop api` antes de depurar `serve`, para liberar a porta 3000. O banco pode continuar em execução. Para mudar conexão, endereço ou fuso durante o debug, edite `.env`.
+Se a API já estiver executando no Docker, use `docker compose stop api` antes de depurar `serve`, para liberar a porta
+3000. O banco pode continuar em execução. Para mudar conexão, endereço ou fuso durante o debug, edite `.env`.
 
-Os três perfis definem `HTTP_REQUEST_TIMEOUT=0s` e `COMMAND_TIMEOUT=0s`, sobrescrevendo o `.env` apenas na sessão de debug. Assim, breakpoints longos não esgotam os deadlines impostos pela aplicação. Reinicie a sessão de debug após alterar essas configurações; um contexto já expirado não é recuperado.
+Os três perfis definem `HTTP_REQUEST_TIMEOUT=0s` e `COMMAND_TIMEOUT=0s`, sobrescrevendo o `.env` apenas na sessão de
+debug. Assim, breakpoints longos não esgotam os deadlines impostos pela aplicação. Reinicie a sessão de debug após
+alterar essas configurações; um contexto já expirado não é recuperado.
 
-Fora desses perfis, os padrões continuam sendo dez segundos por requisição HTTP e dois minutos para `migrate`, `seed` e `complete-due`. As variáveis aceitam durações como `30s` e `5m`; `0s` remove o deadline próprio, preservando cancelamento e eventuais deadlines do contexto pai. Valores negativos ou inválidos são rejeitados na inicialização. O timeout de comandos só é criado para os comandos de manutenção, sem um timer adicional durante `serve`.
+Fora desses perfis, os padrões continuam sendo dez segundos por requisição HTTP e dois minutos para `migrate`, `seed` e
+`complete-due`. As variáveis aceitam durações como `30s` e `5m`; `0s` remove o deadline próprio, preservando
+cancelamento e eventuais deadlines do contexto pai. Valores negativos ou inválidos são rejeitados na inicialização. O
+timeout de comandos só é criado para os comandos de manutenção, sem um timer adicional durante `serve`.
 
-O debugger não pausa o relógio do sistema: ações pendentes ainda expiram em dez minutos e sessões em 24 horas. Timeouts do cliente HTTP ou do PostgreSQL também são independentes dessas configurações. O limite de dez segundos para encerramento gracioso do servidor continua ativo.
+O debugger não pausa o relógio do sistema: ações pendentes ainda expiram em dez minutos e sessões em 24 horas. Timeouts
+do cliente HTTP ou do PostgreSQL também são independentes dessas configurações. O limite de dez segundos para
+encerramento gracioso do servidor continua ativo.
 
 ## Swagger UI
 
-Com a API em execução, acesse [http://127.0.0.1:3000/docs](http://127.0.0.1:3000/docs). O contrato também está disponível em [http://127.0.0.1:3000/openapi.yaml](http://127.0.0.1:3000/openapi.yaml). Essas duas rotas são públicas; as rotas de negócio continuam exigindo sessão.
+Com a API em execução, acesse [http://127.0.0.1:3000/docs](http://127.0.0.1:3000/docs). O contrato também está
+disponível em [http://127.0.0.1:3000/openapi.yaml](http://127.0.0.1:3000/openapi.yaml). Essas duas rotas são públicas;
+as rotas de negócio continuam exigindo sessão.
 
 1. Expanda `POST /v1/dev/sessions`, clique em **Try it out** e envie nome e telefone para emitir uma sessão.
 2. Copie o campo `token` da resposta.
 3. Clique em **Authorize**, informe apenas o token, sem o prefixo `Bearer`, e confirme.
-4. Use **Try it out** nos demais endpoints. Nas mutações, prepare a ação, confira seu resumo e confirme pelo ID retornado.
+4. Use **Try it out** nos demais endpoints. Nas mutações, prepare a ação, confira seu resumo e confirme pelo ID
+   retornado.
 
-As requisições usam a mesma origem em que a documentação foi aberta, inclusive ao alterar a porta da API. A autorização não é persistida após recarregar a página.
+As requisições usam a mesma origem em que a documentação foi aberta, inclusive ao alterar a porta da API. A autorização
+não é persistida após recarregar a página.
 
-O HTML e o contrato são incorporados ao binário, funcionando também no container sem arquivos externos. Os assets do Swagger UI usam a versão fixada `5.33.3` via jsDelivr; o navegador precisa de acesso à internet para carregá-los. Ao editar o contrato, recompile/reinicie a aplicação ou reconstrua a imagem Docker.
+O HTML e o contrato são incorporados ao binário, funcionando também no container sem arquivos externos. Os assets do
+Swagger UI usam a versão fixada `5.33.3` via jsDelivr; o navegador precisa de acesso à internet para carregá-los. Ao
+editar o contrato, recompile/reinicie a aplicação ou reconstrua a imagem Docker.
 
 ## Fluxo completo via HTTP
 
@@ -113,7 +142,8 @@ $slot = $availability.slots[0]
 
 # Preparar não reserva o horário. Exiba o resumo e confirme explicitamente.
 $body = @{ operation = 'create_appointment'; slot_id = $slot.id; category = 'consultation' } | ConvertTo-Json
-$action = Invoke-RestMethod "$base/v1/pending-actions" -Headers $headers -Method Post -ContentType 'application/json' -Body $body
+$action = Invoke-RestMethod "$base/v1/pending-actions" -Headers $headers -Method Post `
+    -ContentType 'application/json' -Body $body
 $action.summary
 $confirmation = Read-Host 'Digite SIM para confirmar'
 if ($confirmation -ceq 'SIM') {
@@ -124,27 +154,46 @@ if ($confirmation -ceq 'SIM') {
 Invoke-RestMethod "$base/v1/appointments?status=scheduled" -Headers $headers
 ```
 
-Para remarcar, prepare uma ação com `operation=reschedule_appointment`, `appointment_id` e outro `slot_id` do mesmo médico. Para cancelar, use `operation=cancel_appointment` e `appointment_id`. Nos dois casos, apresente o resumo ao paciente antes de chamar a mesma rota de confirmação.
+Para remarcar, prepare uma ação com `operation=reschedule_appointment`, `appointment_id` e outro `slot_id` do mesmo
+médico. Para cancelar, use `operation=cancel_appointment` e `appointment_id`. Nos dois casos, apresente o resumo ao
+paciente antes de chamar a mesma rota de confirmação.
 
-`GET /v1/pending-actions/{id}` consulta a operação e seu resultado. Repetir a confirmação de uma ação concluída retorna a resposta original, inclusive depois de reiniciar o processo. A rota de confirmação aceita corpo vazio ou `{}`; não aceita novos parâmetros.
+`GET /v1/pending-actions/{id}` consulta a operação e seu resultado. Repetir a confirmação de uma ação concluída retorna
+a resposta original, inclusive depois de reiniciar o processo. A rota de confirmação aceita corpo vazio ou `{}`; não
+aceita novos parâmetros.
 
-Contrato completo: [api/openapi.yaml](api/openapi.yaml). Todas as rotas de negócio usam Bearer token; health checks e criação de sessão são públicos.
+Contrato completo: [api/openapi.yaml](api/openapi.yaml). Todas as rotas de negócio usam Bearer token; health checks e
+criação de sessão são públicos.
 
 ## Regras
 
-- Identificação local por telefone E.164, sem senha ou OTP; nome obrigatório no cadastro. A sessão dura 24 horas e só seu hash é armazenado. `identity_verified` permanece `false`. A rota `/dev/sessions` serve ao ambiente de desenvolvimento e não comprova posse do telefone.
-- Categorias: `consultation`, `exam`, `procedure`. Um médico possui uma especialidade e atende qualquer categoria nesta fase.
+- Identificação local por telefone E.164, sem senha ou OTP; nome obrigatório no cadastro. A sessão dura 24 horas e só
+  seu hash é armazenado. `identity_verified` permanece `false`. A rota `/dev/sessions` serve ao ambiente de
+  desenvolvimento e não comprova posse do telefone.
+- Categorias: `consultation`, `exam`, `procedure`. Um médico possui uma especialidade e atende qualquer categoria
+  nesta fase.
 - Slots de 30 minutos, em hora cheia ou meia hora. O banco rejeita slots duplicados e fora da grade.
-- Até três agendamentos por semana civil, segunda a domingo, no fuso da clínica. `scheduled` e `completed` contam; `cancelled` não.
-- Datas de entrada em RFC 3339. Intervalos são `[from,to)`. A disponibilidade sempre exclui horários já iniciados; início passado é ajustado ao instante atual.
-- Busca exige médico ou especialidade; ambos juntos aplicam interseção. Sem `to`, começa com duas semanas e amplia uma semana por tentativa até oito. Com `to`, respeita o período explícito. Retorna `searched_from`, `searched_until` e `expanded`.
-- Períodos: `morning` das 06h às 12h, `afternoon` das 12h às 18h e `evening` das 18h às 24h. Respostas usam o fuso configurado.
-- Criar, remarcar e cancelar exigem ação pendente, válida por dez minutos. O servidor revalida as regras na confirmação; preparar não bloqueia disponibilidade.
-- Somente agendamentos `scheduled` ainda não iniciados podem ser alterados. Remarcar preserva médico, categoria e ID do agendamento. Falhas preservam o slot original.
-- Ações com conflito de negócio tornam-se terminais e exigem nova preparação. Falhas transitórias fazem rollback e permitem repetir a confirmação.
+- Até três agendamentos por semana civil, segunda a domingo, no fuso da clínica. `scheduled` e `completed` contam;
+  `cancelled` não.
+- Datas de entrada em RFC 3339. Intervalos são `[from,to)`. A disponibilidade sempre exclui horários já iniciados;
+  início passado é ajustado ao instante atual.
+- Busca exige médico ou especialidade; ambos juntos aplicam interseção. Sem `to`, começa com duas semanas e amplia uma
+  semana por tentativa até oito. Com `to`, respeita o período explícito. Retorna `searched_from`, `searched_until` e
+  `expanded`.
+- Períodos: `morning` das 06h às 12h, `afternoon` das 12h às 18h e `evening` das 18h às 24h. Respostas usam o fuso
+  configurado.
+- Criar, remarcar e cancelar exigem ação pendente, válida por dez minutos. O servidor revalida as regras na confirmação;
+  preparar não bloqueia disponibilidade.
+- Somente agendamentos `scheduled` ainda não iniciados podem ser alterados. Remarcar preserva médico, categoria e ID do
+  agendamento. Falhas preservam o slot original.
+- Ações com conflito de negócio tornam-se terminais e exigem nova preparação. Falhas transitórias fazem rollback e
+  permitem repetir a confirmação.
 - Recursos alheios retornam `404`. Não é possível escolher o paciente por campos enviados na operação.
 
-Erros usam `{ "error": { "code": "SLOT_UNAVAILABLE", "message": "...", "request_id": "..." } }`. Códigos principais: `INVALID_INPUT` (400), `UNAUTHORIZED` (401), `NOT_FOUND` (404), `SLOT_UNAVAILABLE`, `WEEKLY_LIMIT_REACHED`, `APPOINTMENT_CHANGED`, `APPOINTMENT_NOT_MUTABLE` (409), `ACTION_EXPIRED` (410) e `INTERNAL_ERROR` (500). Readiness sem banco retorna `NOT_READY` (503).
+Erros usam `{ "error": { "code": "SLOT_UNAVAILABLE", "message": "...", "request_id": "..." } }`. Códigos principais:
+`INVALID_INPUT` (400), `UNAUTHORIZED` (401), `NOT_FOUND` (404), `SLOT_UNAVAILABLE`, `WEEKLY_LIMIT_REACHED`,
+`APPOINTMENT_CHANGED`, `APPOINTMENT_NOT_MUTABLE` (409), `ACTION_EXPIRED` (410) e `INTERNAL_ERROR` (500). Readiness sem
+banco retorna `NOT_READY` (503).
 
 ## Arquitetura e concorrência
 
@@ -156,19 +205,56 @@ internal/domain                     entidades, estados e regras puras
 internal/infrastructure/postgres     GORM, modelos, migrations e manutenção
 ```
 
-`fiber.Ctx`, modelos GORM e `*gorm.DB` não atravessam as fronteiras do domínio e da aplicação. Os handlers recebem um contexto com timeout configurável, de dez segundos por padrão e desabilitado nos perfis de debug. O relógio é injetado para testar datas e expiração.
+`fiber.Ctx`, modelos GORM e `*gorm.DB` não atravessam as fronteiras do domínio e da aplicação. Os handlers recebem um
+contexto com timeout configurável, de dez segundos por padrão e desabilitado nos perfis de debug. O relógio é injetado
+para testar datas e expiração.
 
-Os IDs de entidades e os parâmetros dos casos de uso e repositórios utilizam `uuid.UUID`. Strings recebidas por HTTP são convertidas e validadas no adapter antes de chegar à aplicação; UUIDs obrigatórios não podem ser `uuid.Nil`. No JSON, os IDs continuam sendo strings. Na persistência, IDs opcionais de ações usam `*uuid.UUID` para representar `NULL`; na resposta, campos ausentes continuam omitidos. As colunas já eram `uuid`, portanto essa mudança de tipos Go não exige uma migration de banco.
+Os IDs de entidades e os parâmetros dos casos de uso e repositórios utilizam `uuid.UUID`. Strings recebidas por HTTP
+são convertidas e validadas no adapter antes de chegar à aplicação; UUIDs obrigatórios não podem ser `uuid.Nil`. No
+JSON, os IDs continuam sendo strings. Na persistência, IDs opcionais de ações usam `*uuid.UUID` para representar `NULL`
+; na resposta, campos ausentes continuam omitidos. As colunas já eram `uuid`, portanto essa mudança de tipos Go não
+exige uma migration de banco.
 
-Confirmações adquirem locks na ordem paciente → ação → agendamento existente → slot de destino. O lock do paciente serializa mutações antes da contagem semanal. Um índice único parcial sobre o slot protege reservas `scheduled` e `completed`, inclusive contra gravações que contornem o serviço.
+Confirmações adquirem locks na ordem paciente → ação → agendamento existente → slot de destino. O lock do paciente
+serializa mutações antes da contagem semanal. Um índice único parcial sobre o slot protege reservas `scheduled` e
+`completed`, inclusive contra gravações que contornem o serviço.
 
-A alteração e o resultado da ação são gravados na mesma transação. Um savepoint permite desfazer uma falha de negócio na gravação e ainda registrar a ação como falha. Erros de infraestrutura desfazem toda a confirmação. Versões impedem executar ações preparadas antes de outra alteração do agendamento.
+A alteração e o resultado da ação são gravados na mesma transação. Um savepoint permite desfazer uma falha de negócio na
+gravação e ainda registrar a ação como falha. Erros de infraestrutura desfazem toda a confirmação. Versões impedem
+executar ações preparadas antes de outra alteração do agendamento.
 
-Logs estruturados incluem ID da requisição, método, padrão da rota, duração, status e código do erro. Não registram corpos, tokens, telefones ou nomes.
+Logs estruturados incluem ID da requisição, método, padrão da rota, duração, status e código do erro. Não registram
+corpos, tokens, telefones ou nomes.
+
+## Formatação
+
+O limite é de 120 caracteres por linha, contando cada tab como quatro caracteres. A regra vale também para testes,
+comentários, strings e documentação. O [AGENTS.md](AGENTS.md) registra as convenções e as exclusões de arquivos gerados
+ou de terceiros.
+
+```powershell
+# Quebra código Go extenso e aplica gofmt.
+golangci-lint fmt
+
+# Formata arquivos JSON com dois espaços de indentação.
+go run ./cmd/stylecheck -fix
+
+# Verifica linhas em todos os textos mantidos pelo projeto e a formatação dos JSONs.
+go run ./cmd/stylecheck
+golangci-lint run
+```
+
+O verificador considera arquivos rastreados e novos arquivos não ignorados pelo Git. Ele não quebra strings longas:
+essas linhas precisam ser ajustadas sem alterar o conteúdo. O workflow `Formatting` executa as verificações em pushes
+e pull requests.
+
+Os schemas do agente ficam em [internal/agent/schemas](internal/agent/schemas), com um campo ou item por linha, e são
+incorporados ao binário por `go:embed`. Não é necessário distribuir esses arquivos separadamente.
 
 ## Testes
 
-Os scripts PowerShell usam a mesma `.env` da raiz e podem ser chamados de qualquer diretório, pois localizam o projeto pelo caminho do próprio script. Para criar a configuração inicial:
+Os scripts PowerShell usam a mesma `.env` da raiz e podem ser chamados de qualquer diretório, pois localizam o projeto
+pelo caminho do próprio script. Para criar a configuração inicial:
 
 ```powershell
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
@@ -184,11 +270,20 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 .\scripts\test-integration.ps1 -v -run TestConcurrentSlotBooking
 ```
 
-Execute com PowerShell (`pwsh -File ./scripts/test-unit.ps1` em outros sistemas). Os scripts devolvem código diferente de zero quando a execução falha. A suíte unitária inclui os testes HTTP em memória; a suíte de integração executa todos os pacotes com a tag `integration`, sem cache e com limite de 120 segundos.
+Execute com PowerShell (`pwsh -File ./scripts/test-unit.ps1` em outros sistemas). Os scripts devolvem código diferente
+de zero quando a execução falha. A suíte unitária inclui os testes HTTP em memória; a suíte de integração executa todos
+os pacotes com a tag `integration`, sem cache e com limite de 120 segundos.
 
-O serviço Compose `test-db`, habilitado pelo perfil `test`, utiliza outro container PostgreSQL, exposto na porta **5433**, com banco **clinic_test**. A aplicação continua usando `db`, na porta **5432**, com banco **clinic**. Em uma `.env` já existente, adicione `TEST_DATABASE_URL` conforme o exemplo acima. Se essa variável já estiver exportada no terminal, ela terá prioridade; remova o override para usar o valor do arquivo. Não há fallback de `TEST_DATABASE_URL` para `DATABASE_URL`, e a suíte rejeita nomes de banco iguais para evitar executar testes no banco da aplicação.
+O serviço Compose `test-db`, habilitado pelo perfil `test`, utiliza outro container PostgreSQL, exposto na porta
+**5433**, com banco **clinic_test**. A aplicação continua usando `db`, na porta **5432**, com banco **clinic**. Em uma
+`.env` já existente, adicione `TEST_DATABASE_URL` conforme o exemplo acima. Se essa variável já estiver exportada no
+terminal, ela terá prioridade; remova o override para usar o valor do arquivo. Não há fallback de `TEST_DATABASE_URL`
+para `DATABASE_URL`, e a suíte rejeita nomes de banco iguais para evitar executar testes no banco da aplicação.
 
-Os testes de integração criam um schema exclusivo por teste no banco de testes e o removem ao terminar. Exigem permissão para criar schemas. Concorrência e restrições são verificadas no PostgreSQL real, sem substituir por SQLite. O serviço `test-db` pode ser parado com `docker compose --profile test stop test-db`; os dados dele não usam o volume `postgres_data` da aplicação. O script mantém o serviço ativo para as próximas execuções.
+Os testes de integração criam um schema exclusivo por teste no banco de testes e o removem ao terminar. Exigem permissão
+para criar schemas. Concorrência e restrições são verificadas no PostgreSQL real, sem substituir por SQLite. O serviço
+`test-db` pode ser parado com `docker compose --profile test stop test-db`; os dados dele não usam o volume
+`postgres_data` da aplicação. O script mantém o serviço ativo para as próximas execuções.
 
 Também é possível executar diretamente, a partir da raiz; a suíte de integração carrega a `.env` automaticamente:
 
@@ -199,7 +294,9 @@ docker compose --profile test up -d --wait test-db
 go test -tags=integration ./... -count=1 -timeout=120s
 ```
 
-Cobertura funcional: disputa por slot, limite semanal concorrente, confirmação repetida e expirada, ownership, reinício, remarcação em semana cheia, rollback com falha injetada, filtros, expansão, manutenção e ciclo HTTP completo. Testes de domínio verificam também a passagem entre domingo e segunda-feira no fuso da clínica.
+Cobertura funcional: disputa por slot, limite semanal concorrente, confirmação repetida e expirada, ownership, reinício,
+remarcação em semana cheia, rollback com falha injetada, filtros, expansão, manutenção e ciclo HTTP completo. Testes de
+domínio verificam também a passagem entre domingo e segunda-feira no fuso da clínica.
 
 ## Próximas fases
 
@@ -213,7 +310,8 @@ O adapter OpenAI é opcional: configure `OPENAI_API_KEY` para habilitá-lo e
 Structured Outputs (padrão `gpt-4.1-mini`). Sem chave, apenas essa rota retorna
 `503 AGENT_UNAVAILABLE`. Os testes usam modelos simulados e servidor HTTP local.
 
-1. Agente em português, abstração de LLM, tool calling, loop limitado e estado em memória. Tools reutilizam os casos de uso; confirmações ficam ligadas ao ID da ação pendente.
+1. Agente em português, abstração de LLM, tool calling, loop limitado e estado em memória. Tools reutilizam os casos de
+   uso; confirmações ficam ligadas ao ID da ação pendente.
 2. Traces, métricas de tokens/latência/custo e avaliações com dataset manual e relógio controlado.
 3. RAG com documentos da clínica, ingestão, embeddings, pgvector, citações e abstention.
 4. Avaliações de recall@k, groundedness, citações, chunking e top-k.

@@ -374,7 +374,8 @@ components:
       enum: [scheduled, cancelled, completed]
     Appointment:
       type: object
-      required: [id, patient_id, slot_id, doctor_id, doctor_name, category, status, starts_at, duration_minutes, version]
+      required:
+        [id, patient_id, slot_id, doctor_id, doctor_name, category, status, starts_at, duration_minutes, version]
       properties:
         id: { type: string, format: uuid }
         patient_id: { type: string, format: uuid }

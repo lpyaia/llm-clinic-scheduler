@@ -1,26 +1,63 @@
 # Plano de desenvolvimento — Go, Fiber e GORM
 
-Plano aprovado em 16/10/2026, derivado do [PRD original](prd.md). Este documento registra as decisões de desenvolvimento; as instruções de execução e o estado da entrega inicial estão no [README](../README.md).
+Plano aprovado em 16/10/2026, derivado do [PRD original](prd.md). Este documento registra as decisões de
+desenvolvimento; as instruções de execução e o estado da entrega inicial estão no [README](../README.md).
 
 ## 1. Objetivo e roadmap
 
-Construir incrementalmente um sistema em que o backend garante as regras de agendamento e o agente interpreta solicitações e conduz a conversa. A primeira entrega será uma API REST sem IA, utilizando **Fiber e GORM**.
+Construir incrementalmente um sistema em que o backend garante as regras de agendamento e o agente interpreta
+solicitações e conduz a conversa. A primeira entrega será uma API REST sem IA, utilizando **Fiber e GORM**.
 
-| Fase | Entrega | Critério de conclusão |
-|---|---|---|
-| **1. Núcleo determinístico** | Catálogo, pacientes, disponibilidade, confirmação e agendamentos | Fluxos completos via HTTP, com garantias de autorização e concorrência |
-| **2. Agente conversacional** | Abstração de LLM, tools, loop limitado e estado em memória | Conversas em português operam o núcleo e preservam contexto |
-| **3. Observabilidade e avaliações** | Traces, métricas e dataset de conversas | Execuções podem ser investigadas e comparadas |
-| **4. RAG operacional** | Ingestão, embeddings, pgvector, recuperação e citações | Respostas fundamentadas nos documentos da clínica, com abstention |
-| **5. Avaliações de RAG** | Dataset e métricas de recuperação e respostas | Estratégias de chunking e top-k podem ser comparadas |
-| **6. Conversas persistentes** | Mensagens e estado no PostgreSQL | Reinícios preservam contexto e mensagens concorrentes são serializadas |
-| **7. WhatsApp** | Webhook, identificação por telefone e respostas | O canal reutiliza a aplicação e não duplica operações |
+- **1. Núcleo determinístico**
+
+  **Entrega:** Catálogo, pacientes, disponibilidade, confirmação e agendamentos
+
+  **Critério de conclusão:** Fluxos completos via HTTP, com garantias de autorização e concorrência
+
+- **2. Agente conversacional**
+
+  **Entrega:** Abstração de LLM, tools, loop limitado e estado em memória
+
+  **Critério de conclusão:** Conversas em português operam o núcleo e preservam contexto
+
+- **3. Observabilidade e avaliações**
+
+  **Entrega:** Traces, métricas e dataset de conversas
+
+  **Critério de conclusão:** Execuções podem ser investigadas e comparadas
+
+- **4. RAG operacional**
+
+  **Entrega:** Ingestão, embeddings, pgvector, recuperação e citações
+
+  **Critério de conclusão:** Respostas fundamentadas nos documentos da clínica, com abstention
+
+- **5. Avaliações de RAG**
+
+  **Entrega:** Dataset e métricas de recuperação e respostas
+
+  **Critério de conclusão:** Estratégias de chunking e top-k podem ser comparadas
+
+- **6. Conversas persistentes**
+
+  **Entrega:** Mensagens e estado no PostgreSQL
+
+  **Critério de conclusão:** Reinícios preservam contexto e mensagens concorrentes são serializadas
+
+- **7. WhatsApp**
+
+  **Entrega:** Webhook, identificação por telefone e respostas
+
+  **Critério de conclusão:** O canal reutiliza a aplicação e não duplica operações
+
 
 A implementação imediata cobre a fase 1.
 
 ## 2. Arquitetura e persistência
 
-**Stack:** Go, [Fiber v3](https://docs.gofiber.io/), GORM com o [driver oficial de PostgreSQL](https://gorm.io/docs/connecting_to_the_database.html), PostgreSQL 17, goose e Docker Compose. pgvector será introduzido na fase de RAG.
+**Stack:** Go, [Fiber v3](https://docs.gofiber.io/), GORM com o
+[driver oficial de PostgreSQL](https://gorm.io/docs/connecting_to_the_database.html), PostgreSQL 17, goose e Docker
+Compose. pgvector será introduzido na fase de RAG.
 
 Adotar um monólito organizado em camadas:
 
@@ -34,7 +71,8 @@ Adotar um monólito organizado em camadas:
 - Rotas agrupadas em `/v1`, com middlewares de sessão, identificação de requisição, logging e recuperação de panic.
 - Tratamento centralizado de erros e DTOs explícitos para entrada e saída.
 - A aplicação recebe `context.Context` e parâmetros próprios; `fiber.Ctx` fica restrito ao adapter HTTP.
-- Habilitar `Immutable` para evitar retenção de valores reutilizados entre requisições. Esse comportamento está documentado pelo [Fiber](https://docs.gofiber.io/).
+- Habilitar `Immutable` para evitar retenção de valores reutilizados entre requisições. Esse comportamento está
+  documentado pelo [Fiber](https://docs.gofiber.io/).
 
 **Uso de GORM:**
 
@@ -60,9 +98,11 @@ Adotar um monólito organizado em camadas:
 
 Categorias: `consultation`, `exam` e `procedure`. Inicialmente, qualquer médico poderá receber as três categorias.
 
-Slots começarão em hora cheia ou meia hora, com unicidade por médico e início. Médico e horário do agendamento serão obtidos pelo slot associado.
+Slots começarão em hora cheia ou meia hora, com unicidade por médico e início. Médico e horário do agendamento serão
+obtidos pelo slot associado.
 
-Um comando local de seed criará médicos, especialidades e slots simulados relativos à data de execução. Não haverá interface administrativa.
+Um comando local de seed criará médicos, especialidades e slots simulados relativos à data de execução. Não haverá
+interface administrativa.
 
 ## 3. Contratos e regras da fase 1
 
@@ -80,9 +120,11 @@ Um comando local de seed criará médicos, especialidades e slots simulados rela
 | `POST /v1/pending-actions/{id}/confirm` | Confirmar e executar |
 | `GET /health/live` e `/health/ready` | Verificar processo e banco |
 
-A sessão local terá token opaco com validade de 24 horas, enviado como Bearer token. Nome será obrigatório no cadastro; telefone existente localizará o paciente sem alterar seu nome.
+A sessão local terá token opaco com validade de 24 horas, enviado como Bearer token. Nome será obrigatório no cadastro;
+telefone existente localizará o paciente sem alterar seu nome.
 
-Todas as rotas de negócio exigirão sessão. O paciente será obtido do contexto autenticado, nunca de um `patient_id` enviado na operação. O contexto reservará `identity_verified`, inicialmente `false`.
+Todas as rotas de negócio exigirão sessão. O paciente será obtido do contexto autenticado, nunca de um `patient_id`
+enviado na operação. O contexto reservará `identity_verified`, inicialmente `false`.
 
 ### Disponibilidade
 
@@ -102,7 +144,8 @@ A preparação receberá:
 - `reschedule_appointment`: agendamento e novo slot.
 - `cancel_appointment`: agendamento.
 
-O servidor validará as condições atuais, armazenará a ação por **10 minutos** e devolverá ID, resumo e expiração. Preparar uma ação não reservará o slot.
+O servidor validará as condições atuais, armazenará a ação por **10 minutos** e devolverá ID, resumo e expiração.
+Preparar uma ação não reservará o slot.
 
 A confirmação receberá somente seu ID, recuperará os parâmetros armazenados e revalidará todas as regras:
 
@@ -115,17 +158,23 @@ A confirmação receberá somente seu ID, recuperará os parâmetros armazenados
 - Somente agendamentos `scheduled` ainda não iniciados poderão ser cancelados ou remarcados.
 - Um comando local marcará como `completed` os agendamentos cujo término já passou.
 
-Erros terão códigos estáveis e mensagens em português: `SLOT_UNAVAILABLE`, `WEEKLY_LIMIT_REACHED`, `ACTION_EXPIRED` e `APPOINTMENT_CHANGED`. Usar HTTP `400`, `401`, `404`, `409` e `410` conforme entrada inválida, sessão inválida, recurso inexistente ou alheio, conflito e expiração.
+Erros terão códigos estáveis e mensagens em português: `SLOT_UNAVAILABLE`, `WEEKLY_LIMIT_REACHED`, `ACTION_EXPIRED` e
+`APPOINTMENT_CHANGED`. Usar HTTP `400`, `401`, `404`, `409` e `410` conforme entrada inválida, sessão inválida,
+recurso inexistente ou alheio, conflito e expiração.
 
 ### Concorrência
 
-Executar cada confirmação em uma transação explícita com [`db.Transaction`](https://gorm.io/docs/transactions.html). Todos os repositórios envolvidos deverão utilizar o mesmo objeto transacional.
+Executar cada confirmação em uma transação explícita com [`db.Transaction`](https://gorm.io/docs/transactions.html).
+Todos os repositórios envolvidos deverão utilizar o mesmo objeto transacional.
 
-Bloquear a linha do paciente antes de contar os agendamentos da semana, usando o suporte a [`FOR UPDATE` do GORM](https://gorm.io/docs/advanced_query.html). Todas as mutações seguirão essa disciplina.
+Bloquear a linha do paciente antes de contar os agendamentos da semana, usando o suporte a
+[`FOR UPDATE` do GORM](https://gorm.io/docs/advanced_query.html). Todas as mutações seguirão essa disciplina.
 
-Criar índice único parcial sobre `slot_id` para agendamentos `scheduled` ou `completed`. A garantia final de exclusividade permanecerá no PostgreSQL.
+Criar índice único parcial sobre `slot_id` para agendamentos `scheduled` ou `completed`. A garantia final de
+exclusividade permanecerá no PostgreSQL.
 
-A alteração do agendamento e o registro do resultado da ação ocorrerão na mesma transação. Remarcações serão atômicas; versionamento e bloqueios protegerão contra alterações baseadas em estado antigo.
+A alteração do agendamento e o registro do resultado da ação ocorrerão na mesma transação. Remarcações serão atômicas;
+versionamento e bloqueios protegerão contra alterações baseadas em estado antigo.
 
 ## 4. Incrementos e testes
 
@@ -155,7 +204,8 @@ A alteração do agendamento e o registro do resultado da ação ocorrerão na m
 - Respeito ao período explícito e ao limite de oito semanas.
 - Rollback integral quando uma operação transacional falhar.
 
-Critério de aceite: fluxo completo pelo contrato HTTP e aprovação das suítes unitária, HTTP e de integração. Os testes de concorrência utilizarão PostgreSQL, reproduzindo os índices e bloqueios reais.
+Critério de aceite: fluxo completo pelo contrato HTTP e aprovação das suítes unitária, HTTP e de integração. Os testes
+de concorrência utilizarão PostgreSQL, reproduzindo os índices e bloqueios reais.
 
 ## 5. Premissas e evolução
 
@@ -167,10 +217,13 @@ Critério de aceite: fluxo completo pelo contrato HTTP e aprovação das suítes
 - Identificação por telefone destinada ao ambiente local, sem senha ou OTP.
 - Logs terão ID de requisição, duração e códigos de erro, sem tokens ou dados pessoais.
 
-Na fase 2, as tools reutilizarão os casos de uso existentes. Mutações prepararão ações; a conversa armazenará seu ID e a confirmação explícita do paciente acionará a execução.
+Na fase 2, as tools reutilizarão os casos de uso existentes. Mutações prepararão ações; a conversa armazenará seu ID e a
+confirmação explícita do paciente acionará a execução.
 
-Avaliações usarão cenários manuais em português e relógio controlado. Execuções com modelos registrarão modelo, prompt, entradas, tools e resultados. Reprodução exata usará componentes determinísticos e respostas gravadas.
+Avaliações usarão cenários manuais em português e relógio controlado. Execuções com modelos registrarão modelo, prompt,
+entradas, tools e resultados. Reprodução exata usará componentes determinísticos e respostas gravadas.
 
-No RAG, documentos serão conteúdo de consulta; citações serão vinculadas aos trechos recuperados e falta de suporte produzirá abstention.
+No RAG, documentos serão conteúdo de consulta; citações serão vinculadas aos trechos recuperados e falta de suporte
+produzirá abstention.
 
 Go e Docker Compose estão instalados. O Docker Engine precisará estar em execução para os testes de integração.

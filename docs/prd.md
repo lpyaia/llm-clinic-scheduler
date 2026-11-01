@@ -4,7 +4,8 @@
 
 Construir um assistente inteligente voltado a pacientes de uma clínica médica.
 
-O sistema permitirá que pacientes gerenciem consultas, exames e procedimentos por meio de conversas em linguagem natural.
+O sistema permitirá que pacientes gerenciem consultas, exames e procedimentos por meio de conversas em linguagem
+natural.
 
 O projeto tem como principal objetivo servir como ambiente de aprendizado prático de AI Engineering, com foco em:
 
@@ -20,7 +21,8 @@ O projeto tem como principal objetivo servir como ambiente de aprendizado práti
 - guardrails;
 - integração entre componentes probabilísticos e lógica determinística.
 
-A primeira versão não utilizará IA. O projeto será desenvolvido de forma incremental, começando por um backend determinístico de agendamento.
+A primeira versão não utilizará IA. O projeto será desenvolvido de forma incremental, começando por um backend
+determinístico de agendamento.
 
 ---
 
@@ -292,7 +294,8 @@ O paciente terá:
 
 O número de telefone será a identidade principal utilizada pelo canal de comunicação.
 
-No futuro, quando houver integração com WhatsApp, o número de origem da mensagem poderá ser utilizado para localizar o paciente.
+No futuro, quando houver integração com WhatsApp, o número de origem da mensagem poderá ser utilizado para localizar o
+paciente.
 
 Nome completo poderá ser utilizado durante cadastro ou vinculação inicial.
 
@@ -625,7 +628,8 @@ Regra arquitetural principal:
 
 O sistema deverá ser provider-agnostic.
 
-Tipos específicos de OpenAI, Anthropic ou qualquer outro fornecedor não deverão contaminar o domínio ou a camada de aplicação.
+Tipos específicos de OpenAI, Anthropic ou qualquer outro fornecedor não deverão contaminar o domínio ou a camada de
+aplicação.
 
 Deverá existir uma abstração baseada nas necessidades do sistema.
 

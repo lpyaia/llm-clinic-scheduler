@@ -109,11 +109,16 @@ func (s *Store) PatientByPhone(ctx context.Context, phone string) (domain.Patien
 }
 
 func (s *Store) InsertPatient(ctx context.Context, p domain.Patient) error {
-	return s.db.WithContext(ctx).Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "phone"}}, DoNothing: true}).Create(&patientRow{ID: p.ID, FullName: p.FullName, Phone: p.Phone}).Error
+	return s.db.WithContext(ctx).
+		Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "phone"}}, DoNothing: true}).
+		Create(&patientRow{ID: p.ID, FullName: p.FullName, Phone: p.Phone}).
+		Error
 }
 
 func (s *Store) InsertSession(ctx context.Context, v domain.Session) error {
-	return s.db.WithContext(ctx).Create(&sessionRow{TokenHash: v.TokenHash, PatientID: v.PatientID, ExpiresAt: v.ExpiresAt}).Error
+	return s.db.WithContext(ctx).
+		Create(&sessionRow{TokenHash: v.TokenHash, PatientID: v.PatientID, ExpiresAt: v.ExpiresAt}).
+		Error
 }
 
 func (s *Store) Session(ctx context.Context, hash string) (domain.Session, error) {
@@ -126,7 +131,15 @@ func (s *Store) Session(ctx context.Context, hash string) (domain.Session, error
 
 func (s *Store) LockPatient(ctx context.Context, id uuid.UUID) error {
 	var row patientRow
-	return translate(s.db.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").Where("id = ?", id).Take(&row).Error)
+
+	return translate(
+		s.db.WithContext(ctx).
+			Clauses(clause.Locking{Strength: "UPDATE"}).
+			Select("id").
+			Where("id = ?", id).
+			Take(&row).
+			Error,
+	)
 }
 
 func (s *Store) Specialties(ctx context.Context) ([]domain.Specialty, error) {
@@ -159,11 +172,17 @@ func (s *Store) Doctors(ctx context.Context, specialty uuid.UUID) ([]domain.Doct
 }
 
 func (s *Store) Slots(ctx context.Context, f application.SlotFilter) ([]domain.Slot, error) {
-	q := s.db.WithContext(ctx).Table("slots AS s").Select("s.id, s.doctor_id, s.starts_at, d.name AS doctor_name").Joins("JOIN doctors AS d ON d.id = s.doctor_id").
+	q := s.db.WithContext(ctx).
+		Table("slots AS s").
+		Select("s.id, s.doctor_id, s.starts_at, d.name AS doctor_name").
+		Joins("JOIN doctors AS d ON d.id = s.doctor_id").
 		Where("s.starts_at >= ? AND s.starts_at < ?", f.From, f.To).
 		Where("s.starts_at > ?", f.Now).
-		Where("NOT EXISTS (SELECT 1 FROM appointments a WHERE a.slot_id = s.id AND a.status IN ('scheduled','completed'))").
-		Where("extract(hour FROM s.starts_at AT TIME ZONE ?) >= ? AND extract(hour FROM s.starts_at AT TIME ZONE ?) < ?", f.Timezone, f.MinHour, f.Timezone, f.MaxHour)
+		Where("NOT EXISTS (SELECT 1 FROM appointments a "+
+			"WHERE a.slot_id = s.id AND a.status IN ('scheduled','completed'))").
+		Where("extract(hour FROM s.starts_at AT TIME ZONE ?) >= ? "+
+			"AND extract(hour FROM s.starts_at AT TIME ZONE ?) < ?",
+			f.Timezone, f.MinHour, f.Timezone, f.MaxHour)
 	if f.DoctorID != uuid.Nil {
 		q = q.Where("s.doctor_id = ?", f.DoctorID)
 	}
@@ -177,14 +196,20 @@ func (s *Store) Slots(ctx context.Context, f application.SlotFilter) ([]domain.S
 	err := q.Order("s.starts_at, s.id").Find(&rows).Error
 	out := make([]domain.Slot, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, domain.Slot{ID: row.ID, DoctorID: row.DoctorID, DoctorName: row.DoctorName, StartsAt: row.StartsAt})
+		out = append(
+			out,
+			domain.Slot{ID: row.ID, DoctorID: row.DoctorID, DoctorName: row.DoctorName, StartsAt: row.StartsAt},
+		)
 	}
 
 	return out, err
 }
 
 func (s *Store) Slot(ctx context.Context, id uuid.UUID, lock bool) (domain.Slot, error) {
-	q := s.db.WithContext(ctx).Table("slots AS s").Select("s.*, d.name AS doctor_name").Joins("JOIN doctors d ON d.id = s.doctor_id")
+	q := s.db.WithContext(ctx).
+		Table("slots AS s").
+		Select("s.*, d.name AS doctor_name").
+		Joins("JOIN doctors d ON d.id = s.doctor_id")
 	if lock {
 		q = q.Clauses(clause.Locking{Strength: "UPDATE", Table: clause.Table{Name: "s"}})
 	}
@@ -193,7 +218,14 @@ func (s *Store) Slot(ctx context.Context, id uuid.UUID, lock bool) (domain.Slot,
 
 	err := q.Where("s.id = ?", id).Take(&row).Error
 
-	return domain.Slot{ID: row.ID, DoctorID: row.DoctorID, DoctorName: row.DoctorName, StartsAt: row.StartsAt}, translate(err)
+	return domain.Slot{
+		ID:         row.ID,
+		DoctorID:   row.DoctorID,
+		DoctorName: row.DoctorName,
+		StartsAt:   row.StartsAt,
+	}, translate(
+		err,
+	)
 }
 
 func (s *Store) SlotOccupied(ctx context.Context, id, exclude uuid.UUID) (bool, error) {
@@ -209,8 +241,17 @@ func (s *Store) SlotOccupied(ctx context.Context, id, exclude uuid.UUID) (bool, 
 	return count > 0, err
 }
 
-func (s *Store) CountWeek(ctx context.Context, patient uuid.UUID, from, to time.Time, exclude uuid.UUID) (int64, error) {
-	q := s.db.WithContext(ctx).Table("appointments AS a").Joins("JOIN slots s ON s.id = a.slot_id").Where("a.patient_id = ? AND a.status IN ('scheduled','completed') AND s.starts_at >= ? AND s.starts_at < ?", patient, from, to)
+func (s *Store) CountWeek(
+	ctx context.Context,
+	patient uuid.UUID,
+	from, to time.Time,
+	exclude uuid.UUID,
+) (int64, error) {
+	q := s.db.WithContext(ctx).
+		Table("appointments AS a").
+		Joins("JOIN slots s ON s.id = a.slot_id").
+		Where("a.patient_id = ? AND a.status IN ('scheduled','completed') "+
+			"AND s.starts_at >= ? AND s.starts_at < ?", patient, from, to)
 	if exclude != uuid.Nil {
 		q = q.Where("a.id <> ?", exclude)
 	}
@@ -223,14 +264,31 @@ func (s *Store) CountWeek(ctx context.Context, patient uuid.UUID, from, to time.
 }
 
 func appointmentQuery(db *gorm.DB) *gorm.DB {
-	return db.Table("appointments AS a").Select("a.*, s.doctor_id, s.starts_at, d.name AS doctor_name").Joins("JOIN slots AS s ON s.id = a.slot_id").Joins("JOIN doctors d ON d.id = s.doctor_id")
+	return db.Table("appointments AS a").
+		Select("a.*, s.doctor_id, s.starts_at, d.name AS doctor_name").
+		Joins("JOIN slots AS s ON s.id = a.slot_id").
+		Joins("JOIN doctors d ON d.id = s.doctor_id")
 }
 
 func toAppointment(row appointmentRow) domain.Appointment {
-	return domain.Appointment{ID: row.ID, PatientID: row.PatientID, SlotID: row.SlotID, DoctorID: row.DoctorID, DoctorName: row.DoctorName, StartsAt: row.StartsAt, Category: row.Category, Status: row.Status, Version: row.Version}
+	return domain.Appointment{
+		ID:         row.ID,
+		PatientID:  row.PatientID,
+		SlotID:     row.SlotID,
+		DoctorID:   row.DoctorID,
+		DoctorName: row.DoctorName,
+		StartsAt:   row.StartsAt,
+		Category:   row.Category,
+		Status:     row.Status,
+		Version:    row.Version,
+	}
 }
 
-func (s *Store) Appointments(ctx context.Context, patient uuid.UUID, f application.AppointmentFilter) ([]domain.Appointment, error) {
+func (s *Store) Appointments(
+	ctx context.Context,
+	patient uuid.UUID,
+	f application.AppointmentFilter,
+) ([]domain.Appointment, error) {
 	q := appointmentQuery(s.db.WithContext(ctx)).Where("a.patient_id = ?", patient)
 	if f.Status != "" {
 		q = q.Where("a.status = ?", f.Status)
@@ -269,11 +327,25 @@ func (s *Store) Appointment(ctx context.Context, id, patient uuid.UUID, lock boo
 }
 
 func (s *Store) InsertAppointment(ctx context.Context, a domain.Appointment) error {
-	return translate(s.db.WithContext(ctx).Create(&appointmentRow{ID: a.ID, PatientID: a.PatientID, SlotID: a.SlotID, Category: a.Category, Status: a.Status, Version: a.Version}).Error)
+	return translate(
+		s.db.WithContext(ctx).
+			Create(&appointmentRow{
+				ID:        a.ID,
+				PatientID: a.PatientID,
+				SlotID:    a.SlotID,
+				Category:  a.Category,
+				Status:    a.Status,
+				Version:   a.Version,
+			}).
+			Error,
+	)
 }
 
 func (s *Store) UpdateAppointment(ctx context.Context, a domain.Appointment, expected int) error {
-	q := s.db.WithContext(ctx).Model(&appointmentRow{}).Where("id = ? AND patient_id = ? AND version = ?", a.ID, a.PatientID, expected).Updates(map[string]any{"slot_id": a.SlotID, "status": a.Status, "version": a.Version})
+	q := s.db.WithContext(ctx).
+		Model(&appointmentRow{}).
+		Where("id = ? AND patient_id = ? AND version = ?", a.ID, a.PatientID, expected).
+		Updates(map[string]any{"slot_id": a.SlotID, "status": a.Status, "version": a.Version})
 	if q.Error != nil {
 		return translate(q.Error)
 	}
@@ -318,7 +390,22 @@ func uuidValue(id *uuid.UUID) uuid.UUID {
 }
 
 func (s *Store) InsertAction(ctx context.Context, a domain.Action) error {
-	return s.db.WithContext(ctx).Create(&actionRow{ID: a.ID, PatientID: a.PatientID, Operation: a.Operation, SlotID: nullableUUID(a.SlotID), AppointmentID: nullableUUID(a.AppointmentID), Category: nullable(a.Category), ExpectedVersion: a.ExpectedVersion, Status: a.Status, FailureCode: a.FailureCode, Summary: a.Summary, CreatedAt: a.CreatedAt, ExpiresAt: a.ExpiresAt}).Error
+	return s.db.WithContext(ctx).
+		Create(&actionRow{
+			ID:              a.ID,
+			PatientID:       a.PatientID,
+			Operation:       a.Operation,
+			SlotID:          nullableUUID(a.SlotID),
+			AppointmentID:   nullableUUID(a.AppointmentID),
+			Category:        nullable(a.Category),
+			ExpectedVersion: a.ExpectedVersion,
+			Status:          a.Status,
+			FailureCode:     a.FailureCode,
+			Summary:         a.Summary,
+			CreatedAt:       a.CreatedAt,
+			ExpiresAt:       a.ExpiresAt,
+		}).
+		Error
 }
 
 func (s *Store) Action(ctx context.Context, id, patient uuid.UUID, lock bool) (domain.Action, error) {
@@ -332,7 +419,20 @@ func (s *Store) Action(ctx context.Context, id, patient uuid.UUID, lock bool) (d
 		return domain.Action{}, translate(err)
 	}
 
-	a := domain.Action{ID: row.ID, PatientID: row.PatientID, Operation: row.Operation, SlotID: uuidValue(row.SlotID), AppointmentID: uuidValue(row.AppointmentID), Category: value(row.Category), ExpectedVersion: row.ExpectedVersion, Status: row.Status, FailureCode: row.FailureCode, Summary: row.Summary, CreatedAt: row.CreatedAt, ExpiresAt: row.ExpiresAt}
+	a := domain.Action{
+		ID:              row.ID,
+		PatientID:       row.PatientID,
+		Operation:       row.Operation,
+		SlotID:          uuidValue(row.SlotID),
+		AppointmentID:   uuidValue(row.AppointmentID),
+		Category:        value(row.Category),
+		ExpectedVersion: row.ExpectedVersion,
+		Status:          row.Status,
+		FailureCode:     row.FailureCode,
+		Summary:         row.Summary,
+		CreatedAt:       row.CreatedAt,
+		ExpiresAt:       row.ExpiresAt,
+	}
 	if row.Result != nil {
 		a.Result = &domain.Appointment{}
 		if err := json.Unmarshal([]byte(*row.Result), a.Result); err != nil {
@@ -356,5 +456,9 @@ func (s *Store) SaveAction(ctx context.Context, a domain.Action) error {
 		result = &text
 	}
 
-	return s.db.WithContext(ctx).Model(&actionRow{}).Where("id = ? AND patient_id = ?", a.ID, a.PatientID).Updates(map[string]any{"status": a.Status, "failure_code": a.FailureCode, "result": result}).Error
+	return s.db.WithContext(ctx).
+		Model(&actionRow{}).
+		Where("id = ? AND patient_id = ?", a.ID, a.PatientID).
+		Updates(map[string]any{"status": a.Status, "failure_code": a.FailureCode, "result": result}).
+		Error
 }

@@ -57,7 +57,10 @@ func (s *Service) StartSession(ctx context.Context, name, phone string) (Session
 
 		result.Patient = patient
 
-		return r.InsertSession(ctx, domain.Session{TokenHash: tokenHash(result.Token), PatientID: patient.ID, ExpiresAt: result.ExpiresAt})
+		return r.InsertSession(
+			ctx,
+			domain.Session{TokenHash: tokenHash(result.Token), PatientID: patient.ID, ExpiresAt: result.ExpiresAt},
+		)
 	})
 
 	return result, err
@@ -116,7 +119,19 @@ func (s *Service) FindSlots(ctx context.Context, input SearchInput) (SearchResul
 			until = input.To
 		}
 
-		slots, err := s.Repo.Slots(ctx, SlotFilter{DoctorID: input.DoctorID, SpecialtyID: input.SpecialtyID, From: from, To: until, Now: now, MinHour: minHour, MaxHour: maxHour, Timezone: s.Location.String()})
+		slots, err := s.Repo.Slots(
+			ctx,
+			SlotFilter{
+				DoctorID:    input.DoctorID,
+				SpecialtyID: input.SpecialtyID,
+				From:        from,
+				To:          until,
+				Now:         now,
+				MinHour:     minHour,
+				MaxHour:     maxHour,
+				Timezone:    s.Location.String(),
+			},
+		)
 		if err != nil {
 			return SearchResult{}, err
 		}
@@ -130,7 +145,11 @@ func (s *Service) FindSlots(ctx context.Context, input SearchInput) (SearchResul
 	return result, nil
 }
 
-func (s *Service) ListAppointments(ctx context.Context, p domain.Principal, f AppointmentFilter) ([]domain.Appointment, error) {
+func (s *Service) ListAppointments(
+	ctx context.Context,
+	p domain.Principal,
+	f AppointmentFilter,
+) ([]domain.Appointment, error) {
 	if p.PatientID == uuid.Nil {
 		return nil, domain.ErrUnauthorized
 	}
@@ -179,7 +198,17 @@ func (s *Service) Prepare(ctx context.Context, p domain.Principal, in PrepareInp
 	}
 
 	now := s.Clock.Now()
-	a := domain.Action{ID: uuid.New(), PatientID: p.PatientID, Operation: in.Operation, SlotID: in.SlotID, AppointmentID: in.AppointmentID, Category: in.Category, CreatedAt: now, ExpiresAt: now.Add(10 * time.Minute), Status: domain.Pending}
+	a := domain.Action{
+		ID:            uuid.New(),
+		PatientID:     p.PatientID,
+		Operation:     in.Operation,
+		SlotID:        in.SlotID,
+		AppointmentID: in.AppointmentID,
+		Category:      in.Category,
+		CreatedAt:     now,
+		ExpiresAt:     now.Add(10 * time.Minute),
+		Status:        domain.Pending,
+	}
 	err := s.Repo.Transaction(ctx, func(r Repository) error {
 		appointment, slot, err := s.validate(ctx, r, a, false, now)
 		if err != nil {
@@ -198,7 +227,12 @@ func (s *Service) Prepare(ctx context.Context, p domain.Principal, in PrepareInp
 			verb, doctor, start = "Cancelar", appointment.DoctorName, appointment.StartsAt
 		}
 
-		a.Summary = fmt.Sprintf("%s atendimento com %s em %s?", verb, doctor, start.In(s.Location).Format("02/01/2006 às 15:04"))
+		a.Summary = fmt.Sprintf(
+			"%s atendimento com %s em %s?",
+			verb,
+			doctor,
+			start.In(s.Location).Format("02/01/2006 às 15:04"),
+		)
 
 		return r.InsertAction(ctx, a)
 	})
@@ -265,7 +299,18 @@ func (s *Service) Confirm(ctx context.Context, p domain.Principal, id uuid.UUID)
 				}
 
 				if a.Operation == domain.CreateAppointment {
-					result = domain.Appointment{ID: uuid.New(), PatientID: p.PatientID, SlotID: slot.ID, DoctorID: slot.DoctorID, DoctorName: slot.DoctorName, StartsAt: slot.StartsAt, Category: a.Category, Status: domain.Scheduled, Version: 1}
+					result = domain.Appointment{
+						ID:         uuid.New(),
+						PatientID:  p.PatientID,
+						SlotID:     slot.ID,
+						DoctorID:   slot.DoctorID,
+						DoctorName: slot.DoctorName,
+						StartsAt:   slot.StartsAt,
+						Category:   a.Category,
+						Status:     domain.Scheduled,
+						Version:    1,
+					}
+
 					return tx.InsertAppointment(ctx, result)
 				}
 
@@ -274,7 +319,8 @@ func (s *Service) Confirm(ctx context.Context, p domain.Principal, id uuid.UUID)
 				if a.Operation == domain.CancelAppointment {
 					result.Status = domain.Cancelled
 				} else {
-					result.SlotID, result.DoctorID, result.DoctorName, result.StartsAt = slot.ID, slot.DoctorID, slot.DoctorName, slot.StartsAt
+					result.SlotID, result.DoctorID = slot.ID, slot.DoctorID
+					result.DoctorName, result.StartsAt = slot.DoctorName, slot.StartsAt
 				}
 
 				return tx.UpdateAppointment(ctx, result, appointment.Version)
@@ -327,7 +373,13 @@ func actionFailure(code string) error {
 	}
 }
 
-func (s *Service) validate(ctx context.Context, r Repository, a domain.Action, lock bool, now time.Time) (domain.Appointment, domain.Slot, error) {
+func (s *Service) validate(
+	ctx context.Context,
+	r Repository,
+	a domain.Action,
+	lock bool,
+	now time.Time,
+) (domain.Appointment, domain.Slot, error) {
 	var appointment domain.Appointment
 
 	if a.Operation != domain.CreateAppointment {
@@ -380,7 +432,8 @@ func (s *Service) validate(ctx context.Context, r Repository, a domain.Action, l
 		return appointment, slot, domain.ErrSlotUnavailable
 	}
 
-	if a.Operation == domain.RescheduleAppointment && (slot.DoctorID != appointment.DoctorID || slot.ID == appointment.SlotID) {
+	if a.Operation == domain.RescheduleAppointment &&
+		(slot.DoctorID != appointment.DoctorID || slot.ID == appointment.SlotID) {
 		return appointment, slot, invalid("Escolha outro horário do mesmo médico.")
 	}
 
