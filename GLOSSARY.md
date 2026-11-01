@@ -4,6 +4,9 @@ Patients search for available appointments and refine their preferences across a
 
 ## Language
 
+**Appointment query**:
+A patient's request to list their own appointments, optionally filtered by status and date interval.
+
 **Search preferences**:
 The patient's current choices of doctor, specialty, period of day and dates for an availability search.
 _Avoid_: Search parameters, search settings

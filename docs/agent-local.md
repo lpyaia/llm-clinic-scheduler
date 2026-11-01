@@ -104,16 +104,35 @@ a identidade. Nem o corpo HTTP nem os argumentos da ferramenta aceitam
 devolve chamadas estruturadas ou um objeto JSON final. Tipos OpenAI ficam no
 adapter. Trocar esse adapter por um modelo simulado não altera o Scheduling Core.
 
+As duas ferramentas implementam a mesma interface interna `toolExecutor`, definida
+em `internal/agent/tools.go`. Cada módulo fornece a definição da ferramenta e executa
+seus argumentos. As instâncias são criadas para cada mensagem, com o paciente
+autenticado ou as preferências da conversa já vinculados. A execução produz um de
+dois resultados:
+
+- `returnToModel` (retornar ao modelo): dados da consulta e um finalizador que verifica
+  a resposta posterior. `list_appointments`, em `appointments.go`, usa esse resultado.
+- `replyToPatient` (responder ao paciente): resposta pronta que encerra a mensagem.
+  `find_available_slots`, em `search.go`, usa esse resultado para disponibilidade e
+  esclarecimentos. A conversa pode continuar em uma nova mensagem.
+
 O loop aceita uma chamada de ferramenta por etapa e no máximo quatro chamadas ao
-modelo. Valida nome, ID, argumentos, campos desconhecidos, chaves duplicadas,
-status e intervalo antes de acessar o núcleo. Rejeita resposta final sem consulta
-prévia, chamadas repetidas com o mesmo ID, respostas incompletas, recusas e
-respostas misturando conteúdo final e ferramentas.
+modelo. Controla cancelamento, nome, ID e correlação entre chamadas e resultados.
+Os módulos validam argumentos, campos desconhecidos, chaves duplicadas, status e
+intervalo antes de acessar o núcleo. Respostas finais sem consulta prévia, chamadas
+repetidas com o mesmo ID, respostas incompletas, recusas e respostas misturando
+conteúdo final e ferramentas são rejeitadas.
 
 O modelo devolve `appointment_ids` com todos os IDs da última consulta, na mesma
 ordem. O servidor verifica essa lista e monta a mensagem em português com os
 dados reais, inclusive a ausência de resultados. O resultado da ferramenta e a
 resposta HTTP omitem identidade, telefone e outros campos desnecessários.
+
+O módulo de consulta conserva apenas a última lista obtida durante a execução da
+mensagem. Uma consulta posterior substitui essa lista, inclusive quando retorna
+vazia. O finalizador e os resultados são descartados ao encerrar a mensagem; uma
+nova mensagem exige uma nova consulta. O loop permite trocar de listagem para busca
+de horários, que encerra a mensagem com sua própria resposta.
 
 `agent.ConversationStore` abstrai armazenamento e atualização atômica de estado e
 histórico. A implementação em memória isola por ID e paciente, serializa mensagens
