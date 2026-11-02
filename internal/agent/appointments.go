@@ -12,6 +12,10 @@ import (
 	"github.com/lpyaia/llm-clinic-scheduler/internal/domain"
 )
 
+const appointmentAnswerInstructions = `Após list_appointments, responda somente com o objeto JSON appointment_ids,
+contendo todos os IDs da última lista, na mesma ordem.
+Se a lista estiver vazia, use appointment_ids: [].`
+
 // Appointment contains only the data needed to present a consultation result.
 type Appointment struct {
 	ID         uuid.UUID `json:"id"`
@@ -70,7 +74,14 @@ func (q *appointmentQuery) execute(ctx context.Context, arguments json.RawMessag
 
 	q.rows = rows
 
-	return returnToModel{content: result, finalize: q.finish}, nil
+	return returnToModel{
+		content: result,
+		responseSchema: ResponseSchema{
+			Name: "appointment_answer", Schema: json.RawMessage(appointmentAnswerSchema),
+		},
+		instructions: appointmentAnswerInstructions,
+		finalize:     q.finish,
+	}, nil
 }
 
 func (q *appointmentQuery) finish(answer json.RawMessage) (Result, error) {

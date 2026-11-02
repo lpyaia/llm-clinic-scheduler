@@ -6,7 +6,7 @@ import _ "embed"
 var listSchema string
 
 //go:embed schemas/appointment_answer.json
-var answerSchema string
+var appointmentAnswerSchema string
 
 //go:embed schemas/find_available_slots.json
 var findAvailableSlotsSchema string

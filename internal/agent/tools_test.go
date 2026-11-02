@@ -31,6 +31,24 @@ func appointmentAnswer(t *testing.T, ids ...uuid.UUID) agent.Response {
 	return agent.Response{Content: content}
 }
 
+func assertToolSelection(t *testing.T, in agent.Request) {
+	t.Helper()
+
+	if !in.RequireTool || in.ResponseSchema != nil || strings.Contains(in.Messages[0].Content, "appointment_ids") {
+		t.Fatalf("initial request must select a tool without an appointment answer contract: %+v", in)
+	}
+}
+
+func assertAppointmentContinuation(t *testing.T, in agent.Request) {
+	t.Helper()
+
+	if in.RequireTool || in.ResponseSchema == nil || in.ResponseSchema.Name != "appointment_answer" ||
+		!strings.Contains(string(in.ResponseSchema.Schema), `"appointment_ids"`) ||
+		!strings.Contains(in.Messages[0].Content, "appointment_ids") {
+		t.Fatalf("continuation lost the appointment module's answer contract: %+v", in)
+	}
+}
+
 func TestFinalAnswerUsesOnlyLatestAppointmentQuery(t *testing.T) {
 	patientID := uuid.New()
 	firstID, secondID, thirdID := uuid.New(), uuid.New(), uuid.New()
@@ -56,8 +74,12 @@ func TestFinalAnswerUsesOnlyLatestAppointmentQuery(t *testing.T) {
 			model := modelFunc(func(_ context.Context, in agent.Request) (agent.Response, error) {
 				step++
 				if step == 1 {
+					assertToolSelection(t, in)
+
 					return toolReply("first", "list_appointments", `{}`), nil
 				}
+
+				assertAppointmentContinuation(t, in)
 
 				last, previous := in.Messages[len(in.Messages)-1], in.Messages[len(in.Messages)-2]
 
@@ -124,6 +146,12 @@ func TestAppointmentFinalizerAndCallIDsAreScopedToOneMessage(t *testing.T) {
 	step := 0
 	model := modelFunc(func(_ context.Context, in agent.Request) (agent.Response, error) {
 		step++
+		if step == 1 || step == 3 || step == 4 {
+			assertToolSelection(t, in)
+		} else {
+			assertAppointmentContinuation(t, in)
+		}
+
 		if step == 1 || step == 4 {
 			return toolReply("list", "list_appointments", `{}`), nil
 		}
@@ -213,6 +241,12 @@ func TestSlotSearchRepliesWithoutAnotherModelCompletion(t *testing.T) {
 			step := 0
 			model := modelFunc(func(_ context.Context, in agent.Request) (agent.Response, error) {
 				step++
+				if step == 1 {
+					assertToolSelection(t, in)
+				} else {
+					assertAppointmentContinuation(t, in)
+				}
+
 				if test.listFirst && step == 1 {
 					return toolReply("list", "list_appointments", `{}`), nil
 				}

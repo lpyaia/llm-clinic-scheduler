@@ -47,6 +47,15 @@ type message struct {
 	Refusal    *string    `json:"refusal,omitempty"`
 }
 
+type responseFormat struct {
+	Type       string `json:"type"`
+	JSONSchema struct {
+		Name   string          `json:"name"`
+		Strict bool            `json:"strict"`
+		Schema json.RawMessage `json:"schema"`
+	} `json:"json_schema"`
+}
+
 func (c *Client) Complete(ctx context.Context, in agent.Request) (agent.Response, error) {
 	if strings.TrimSpace(c.APIKey) == "" || strings.TrimSpace(c.Model) == "" {
 		return agent.Response{}, errors.New("configure OPENAI_API_KEY e OPENAI_MODEL")
@@ -59,27 +68,28 @@ func (c *Client) Complete(ctx context.Context, in agent.Request) (agent.Response
 			Type     string   `json:"type"`
 			Function function `json:"function"`
 		} `json:"tools"`
-		ResponseFormat struct {
-			Type       string `json:"type"`
-			JSONSchema struct {
-				Name   string          `json:"name"`
-				Strict bool            `json:"strict"`
-				Schema json.RawMessage `json:"schema"`
-			} `json:"json_schema"`
-		} `json:"response_format"`
-		ParallelToolCalls   bool   `json:"parallel_tool_calls"`
-		Store               bool   `json:"store"`
-		MaxCompletionTokens int    `json:"max_completion_tokens"`
-		ReasoningEffort     string `json:"reasoning_effort,omitempty"`
+		ResponseFormat      *responseFormat `json:"response_format,omitempty"`
+		ToolChoice          string          `json:"tool_choice,omitempty"`
+		ParallelToolCalls   bool            `json:"parallel_tool_calls"`
+		Store               bool            `json:"store"`
+		MaxCompletionTokens int             `json:"max_completion_tokens"`
+		ReasoningEffort     string          `json:"reasoning_effort,omitempty"`
 	}
 
 	request.Model = c.Model
 	request.MaxCompletionTokens = 2048
-	request.ResponseFormat.Type = "json_schema"
-	request.ResponseFormat.JSONSchema.Name = "appointment_answer"
 
-	request.ResponseFormat.JSONSchema.Strict = true
-	request.ResponseFormat.JSONSchema.Schema = in.ResponseSchema
+	if in.RequireTool {
+		request.ToolChoice = "required"
+	}
+
+	if in.ResponseSchema != nil {
+		request.ResponseFormat = &responseFormat{Type: "json_schema"}
+		request.ResponseFormat.JSONSchema.Name = in.ResponseSchema.Name
+		request.ResponseFormat.JSONSchema.Strict = true
+		request.ResponseFormat.JSONSchema.Schema = in.ResponseSchema.Schema
+	}
+
 	if c.Model == "gpt-6-luna" {
 		// Chat Completions tool calling requires reasoning to be disabled for Luna.
 		request.ReasoningEffort = "none"
@@ -201,7 +211,8 @@ func (c *Client) Complete(ctx context.Context, in agent.Request) (agent.Response
 		return out, nil
 	}
 
-	if choice.FinishReason != "stop" || choice.Message.Content == nil || !json.Valid([]byte(*choice.Message.Content)) {
+	if in.RequireTool || choice.FinishReason != "stop" || choice.Message.Content == nil ||
+		!json.Valid([]byte(*choice.Message.Content)) {
 		return agent.Response{}, malformed()
 	}
 

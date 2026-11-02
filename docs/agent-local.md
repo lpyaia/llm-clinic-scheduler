@@ -100,9 +100,13 @@ a identidade. Nem o corpo HTTP nem os argumentos da ferramenta aceitam
 
 ## Execução e proteção dos resultados
 
-`agent.Model` recebe mensagens, definições de ferramentas e o schema da resposta;
-devolve chamadas estruturadas ou um objeto JSON final. Tipos OpenAI ficam no
-adapter. Trocar esse adapter por um modelo simulado não altera o Scheduling Core.
+`agent.Model` recebe mensagens, definições de ferramentas e, nas continuações, um
+schema de resposta com nome e conteúdo JSON. A primeira chamada de cada mensagem
+usa `RequireTool`: exige a seleção de uma ferramenta e omite o schema final.
+O adapter envia `tool_choice: "required"` nessa chamada, sem `response_format`.
+Uma continuação permite novas ferramentas ou a resposta final no schema fornecido
+pelo módulo ativo. Tipos OpenAI ficam no adapter. Trocar esse adapter por um modelo
+simulado não altera o Scheduling Core.
 
 As duas ferramentas implementam a mesma interface interna `toolExecutor`, definida
 em `internal/agent/tools.go`. Cada módulo fornece a definição da ferramenta e executa
@@ -110,11 +114,17 @@ seus argumentos. As instâncias são criadas para cada mensagem, com o paciente
 autenticado ou as preferências da conversa já vinculados. A execução produz um de
 dois resultados:
 
-- `returnToModel` (retornar ao modelo): dados da consulta e um finalizador que verifica
-  a resposta posterior. `list_appointments`, em `appointments.go`, usa esse resultado.
+- `returnToModel` (retornar ao modelo): dados, schema nomeado, instruções de resposta
+  e um finalizador que verifica a resposta posterior. `list_appointments`, em
+  `appointments.go`, fornece `appointment_answer` com os IDs da última consulta.
 - `replyToPatient` (responder ao paciente): resposta pronta que encerra a mensagem.
   `find_available_slots`, em `search.go`, usa esse resultado para disponibilidade e
   esclarecimentos. A conversa pode continuar em uma nova mensagem.
+
+O loop encaminha o schema e as instruções de `returnToModel` à próxima chamada.
+O adapter serializa o nome e o conteúdo recebidos com `strict: true`. A definição
+JSON continua em `internal/agent/schemas/appointment_answer.json`, embutida por
+`schemas.go`. A busca de horários responde ao paciente durante a seleção de tool.
 
 O loop aceita uma chamada de ferramenta por etapa e no máximo quatro chamadas ao
 modelo. Controla cancelamento, nome, ID e correlação entre chamadas e resultados.

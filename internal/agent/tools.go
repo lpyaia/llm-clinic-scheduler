@@ -20,10 +20,13 @@ type toolOutcome interface {
 
 type answerFinalizer func(json.RawMessage) (Result, error)
 
-// returnToModel supplies tool data and owns verification of a later model answer.
+// returnToModel supplies tool data, the named answer schema and instructions,
+// and verification of a later model answer.
 type returnToModel struct {
-	content  json.RawMessage
-	finalize answerFinalizer
+	content        json.RawMessage
+	responseSchema ResponseSchema
+	instructions   string
+	finalize       answerFinalizer
 }
 
 func (returnToModel) toolOutcome() {}

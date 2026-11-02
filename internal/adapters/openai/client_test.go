@@ -46,6 +46,8 @@ func provider(t *testing.T, handler http.HandlerFunc) *openai.Client {
 }
 
 func TestProviderTranslatesToolCallsAndStructuredResponses(t *testing.T) {
+	const answerSchema = `{"type":"object","properties":{},"additionalProperties":false}`
+
 	client := provider(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" || r.URL.Path != "/v1/chat/completions" ||
 			r.Header.Get("Authorization") != "Bearer test-key" {
@@ -65,12 +67,15 @@ func TestProviderTranslatesToolCallsAndStructuredResponses(t *testing.T) {
 					Strict bool   `json:"strict"`
 				} `json:"function"`
 			} `json:"tools"`
-			ResponseFormat struct {
+			ResponseFormat *struct {
 				Type   string `json:"type"`
 				Schema struct {
-					Strict bool `json:"strict"`
+					Name   string          `json:"name"`
+					Strict bool            `json:"strict"`
+					Schema json.RawMessage `json:"schema"`
 				} `json:"json_schema"`
 			} `json:"response_format"`
+			ToolChoice      *string `json:"tool_choice"`
 			Parallel        bool    `json:"parallel_tool_calls"`
 			Store           bool    `json:"store"`
 			ReasoningEffort *string `json:"reasoning_effort"`
@@ -82,9 +87,7 @@ func TestProviderTranslatesToolCallsAndStructuredResponses(t *testing.T) {
 		if in.Model != "test-model" || in.Parallel || in.Store || len(in.Tools) != 1 ||
 			in.Tools[0].Type != "function" ||
 			in.Tools[0].Function.Name != "list_appointments" ||
-			!in.Tools[0].Function.Strict ||
-			in.ResponseFormat.Type != "json_schema" ||
-			!in.ResponseFormat.Schema.Strict {
+			!in.Tools[0].Function.Strict {
 			t.Errorf("incorrect protocol mapping: %+v", in)
 		}
 
@@ -93,6 +96,10 @@ func TestProviderTranslatesToolCallsAndStructuredResponses(t *testing.T) {
 		}
 
 		if in.Messages[len(in.Messages)-1].Role == "user" {
+			if in.ResponseFormat != nil || in.ToolChoice == nil || *in.ToolChoice != "required" {
+				t.Errorf("initial request must select a tool without a final-answer schema: %+v", in)
+			}
+
 			_, _ = io.WriteString(
 				w,
 				`
@@ -127,6 +134,12 @@ func TestProviderTranslatesToolCallsAndStructuredResponses(t *testing.T) {
 			t.Error("tool result lost its call identifier")
 		}
 
+		if in.ToolChoice != nil || in.ResponseFormat == nil || in.ResponseFormat.Type != "json_schema" ||
+			!in.ResponseFormat.Schema.Strict || in.ResponseFormat.Schema.Name != "custom_answer" ||
+			string(in.ResponseFormat.Schema.Schema) != answerSchema {
+			t.Errorf("continuation lost the caller's named schema: %+v", in)
+		}
+
 		_, _ = io.WriteString(
 			w,
 			`
@@ -152,7 +165,7 @@ func TestProviderTranslatesToolCallsAndStructuredResponses(t *testing.T) {
 				Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`),
 			},
 		},
-		ResponseSchema: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`),
+		RequireTool: true,
 	}
 
 	first, err := client.Complete(context.Background(), in)
@@ -166,6 +179,9 @@ func TestProviderTranslatesToolCallsAndStructuredResponses(t *testing.T) {
 		agent.Message{Role: "assistant", ToolCalls: first.ToolCalls},
 		agent.Message{Role: "tool", ToolCallID: "call-1", Content: "[]"},
 	)
+	in.RequireTool = false
+	in.ResponseSchema = &agent.ResponseSchema{Name: "custom_answer", Schema: json.RawMessage(answerSchema)}
+
 	last, err := client.Complete(context.Background(), in)
 	if err != nil || string(last.Content) != `{"appointment_ids":[]}` {
 		t.Fatalf("last=%+v error=%v", last, err)
@@ -175,11 +191,17 @@ func TestProviderTranslatesToolCallsAndStructuredResponses(t *testing.T) {
 func TestGPT6LunaCanCallToolsThroughChatCompletions(t *testing.T) {
 	client := provider(t, func(w http.ResponseWriter, r *http.Request) {
 		var request struct {
-			Model           string `json:"model"`
-			ReasoningEffort string `json:"reasoning_effort"`
+			Model           string          `json:"model"`
+			ReasoningEffort string          `json:"reasoning_effort"`
+			ToolChoice      string          `json:"tool_choice"`
+			ResponseFormat  json.RawMessage `json:"response_format"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 			t.Error(err)
+		}
+
+		if request.ToolChoice != "required" || request.ResponseFormat != nil {
+			t.Error("tool selection must not send an appointment response format")
 		}
 
 		// GPT-6 Luna requires reasoning_effort=none for Chat Completions tool calling.
@@ -237,7 +259,7 @@ func TestGPT6LunaCanCallToolsThroughChatCompletions(t *testing.T) {
 				Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`),
 			},
 		},
-		ResponseSchema: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`),
+		RequireTool: true,
 	}
 
 	out, err := client.Complete(context.Background(), in)
@@ -295,6 +317,32 @@ func TestProviderRejectsMalformedOrIncompleteResponses(t *testing.T) {
 		if domain.ErrorCode(err) != "MODEL_INVALID_RESPONSE" {
 			t.Fatalf("malformed response accepted: %v", err)
 		}
+	}
+}
+
+func TestProviderRejectsFinalAnswerWhenToolIsRequired(t *testing.T) {
+	client := provider(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "{}"
+      }
+    }
+  ]
+}`)
+	})
+
+	_, err := client.Complete(context.Background(), agent.Request{
+		Tools: []agent.Tool{{
+			Name: "list_appointments", Parameters: json.RawMessage(`{"type":"object","properties":{}}`),
+		}},
+		RequireTool: true,
+	})
+	if domain.ErrorCode(err) != "MODEL_INVALID_RESPONSE" {
+		t.Fatalf("required tool call was bypassed by a final answer: %v", err)
 	}
 }
 
