@@ -31,6 +31,7 @@ type Availability struct {
 type slotSearch struct {
 	core        *application.Service
 	preferences *SearchPreferences
+	booking     *BookingState
 }
 
 func (*slotSearch) definition() Tool {
@@ -47,6 +48,8 @@ func clarification(message string) replyToPatient {
 }
 
 func (s *slotSearch) execute(ctx context.Context, raw json.RawMessage) (toolOutcome, error) {
+	*s.booking = BookingState{}
+
 	next, question, err := s.preferences.refine(raw, s.core.Clock, s.core.Location)
 	if err != nil {
 		return nil, err

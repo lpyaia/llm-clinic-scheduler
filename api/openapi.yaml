@@ -14,15 +14,21 @@ paths:
   /v1/agent/messages:
     post:
       operationId: querySchedulingConversationally
-      summary: Consultar agendamentos e buscar horários em português
+      summary: Consultar, buscar horários e agendar com confirmação em português
       description: >-
         Resolve o paciente pela sessão. Sem conversation_id, inicia uma conversa;
         repita o ID retornado para preservar histórico e preferências de busca.
         Conversas pertencem ao paciente autenticado, vivem em memória e são perdidas
         ao reiniciar. IDs desconhecidos ou de outro paciente retornam 404.
-        O modelo chama list_appointments ou find_available_slots; nomes são
+        O modelo chama list_appointments, find_available_slots ou create_appointment; nomes são
         resolvidos pelo catálogo e datas relativas usam o relógio e fuso da clínica.
         A resposta em português é montada pelo servidor a partir dos resultados reais.
+        Criar prepara uma ação sem reservar; a resposta pending_action apresenta resumo,
+        categoria e validade. Uma mensagem posterior como "sim, confirmo" confirma somente
+        a proposta desta conversa. Outra resposta invalida a proposta anterior;
+        alterações exigem novo resumo e confirmação. Repetir a confirmação é idempotente.
+        Confirmações durante outra mensagem em execução retornam INVALID_INPUT (400);
+        aguarde a resposta e leia o resumo antes de confirmar novamente.
         Limite de quatro chamadas ao modelo. Requer OPENAI_API_KEY no servidor.
       requestBody:
         required: true
@@ -43,13 +49,19 @@ paths:
                   example: Quais atendimentos tenho marcados?
       responses:
         '200':
-          description: Consulta concluída, inclusive quando não há agendamentos.
+          description: Resposta, esclarecimento, proposta ou confirmação concluída.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AgentReply' }
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '410':
+          description: ACTION_EXPIRED; escolha novamente para preparar outra proposta.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '502':
           description: MODEL_INVALID_RESPONSE ou AGENT_STEP_LIMIT. Nenhuma mutação é executada.
           content:
@@ -393,6 +405,15 @@ components:
       properties:
         conversation_id: { type: string, format: uuid }
         message: { type: string }
+        pending_action:
+          type: object
+          description: Proposta apresentada nesta resposta; não reserva o horário.
+          required: [id, summary, category, expires_at]
+          properties:
+            id: { type: string, format: uuid }
+            summary: { type: string }
+            category: { $ref: '#/components/schemas/Category' }
+            expires_at: { type: string, format: date-time }
         availability:
           type: object
           description: Presente somente quando uma busca de horários foi concluída.

@@ -1,0 +1,30 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "slot_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "ID do horário apresentado escolhido explicitamente; null preserva, string vazia limpa se ambíguo."
+    },
+    "category": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "consultation",
+        "exam",
+        "procedure",
+        "",
+        null
+      ]
+    }
+  },
+  "required": [
+    "slot_id",
+    "category"
+  ]
+}

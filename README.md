@@ -300,11 +300,14 @@ domínio verificam também a passagem entre domingo e segunda-feira no fuso da c
 
 ## Próximas fases
 
-Os primeiros fluxos da V2 já estão disponíveis: [consultas e busca conversacional de horários](docs/agent-local.md).
+Os primeiros fluxos da V2 já estão disponíveis: [consultas, busca e agendamento conversacional](docs/agent-local.md).
 `POST /v1/agent/messages` recebe uma mensagem em português e usa a sessão existente.
 Retorne o `conversation_id` recebido para preservar preferências e histórico em memória.
 Buscas resolvem nomes pelo catálogo, convertem datas relativas no fuso da clínica e
 reutilizam a disponibilidade determinística; nomes ambíguos geram esclarecimento.
+Escolher um horário e categoria prepara uma proposta com resumo e validade, sem reservar.
+Uma confirmação explícita posterior, como “sim, confirmo”, executa apenas a proposta
+daquela conversa e paciente; repetir a confirmação retorna o mesmo agendamento.
 O adapter OpenAI é opcional: configure `OPENAI_API_KEY` para habilitá-lo e
 `OPENAI_MODEL` para escolher um modelo compatível com Chat Completions, tools e
 Structured Outputs (padrão `gpt-4.1-mini`). Sem chave, apenas essa rota retorna

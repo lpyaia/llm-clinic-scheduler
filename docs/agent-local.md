@@ -1,10 +1,11 @@
-# Consultas e busca conversacional de horários — tickets #7 e #10
+# Consultas, busca e agendamento conversacional — tickets #7, #10 e #11
 
 O paciente autenticado consulta seus agendamentos em português por
 `POST /v1/agent/messages`. A ferramenta `list_appointments` reutiliza
 `application.Service.ListAppointments`; somente o middleware de sessão fornece
 a identidade. Nem o corpo HTTP nem os argumentos da ferramenta aceitam
-`patient_id`. Não há ferramentas de mutação nesta entrega.
+`patient_id`. A ferramenta `create_appointment` prepara uma proposta pelo mesmo
+núcleo; a aplicação exige confirmação explícita em uma mensagem posterior.
 
 ## Execução local com OpenAI
 
@@ -98,6 +99,45 @@ a identidade. Nem o corpo HTTP nem os argumentos da ferramenta aceitam
    A busca termina na ferramenta e o servidor monta a resposta. Para iniciar outra
    conversa, omita o ID.
 
+## Agendar com confirmação
+
+Depois de uma busca, continue com o mesmo `conversation_id`: “Quero o primeiro
+horário para consulta”. Categorias aceitas são consulta, exame e procedimento.
+O modelo escolhe somente entre os IDs dos horários apresentados na última busca.
+Uma escolha incompleta gera pergunta; a conversa guarda o horário ou categoria
+já informados. Nomes, horários e categorias ambíguos exigem esclarecimento.
+
+`create_appointment` chama `application.Service.Prepare` com a identidade da sessão.
+Não reserva o horário. A resposta inclui `pending_action` com `id`, `summary`,
+`category` e `expires_at`, além de uma mensagem com categoria, resumo, validade
+no fuso da clínica e pedido explícito de confirmação. A ação vale dez minutos.
+
+Após ler o resumo, envie “sim, confirmo” na mesma conversa. A aplicação aceita
+mensagens completas: “sim”, “confirmo”, “sim, confirmo”, “sim confirmo”,
+“pode agendar” e “sim, pode agendar”, ignorando caixa, espaços repetidos e
+pontos ou exclamações finais. Perguntas e frases com condições não confirmam.
+Essa verificação usa diretamente a mensagem do paciente, sem chamar o modelo.
+Não existe ferramenta de confirmação nem argumento para escolher ID de ação.
+Confirmar junto com a escolha inicial apenas recebe o resumo; exige outra mensagem.
+Uma confirmação enviada enquanto outra mensagem está em execução é rejeitada com
+`INVALID_INPUT` (400). Aguarde a resposta, leia o resumo e confirme novamente;
+a confirmação não espera na fila para executar uma proposta ainda não apresentada.
+
+Qualquer outra mensagem processada invalida a confirmação da proposta anterior,
+inclusive se o modelo falhar ou a requisição for cancelada durante a execução.
+“Não” descarta a proposta; uma resposta ambígua pede esclarecimento. Para retomar,
+escolha ou altere horário/categoria e leia o novo resumo antes de confirmar.
+Trocar apenas a categoria preserva o horário escolhido; uma nova busca limpa
+as escolhas e os horários apresentados anteriormente. Nos argumentos da ferramenta,
+`null` preserva a escolha e string vazia limpa um horário ou categoria ambíguos.
+
+Sem proposta, a aplicação pede uma escolha. Propostas expiradas retornam
+`ACTION_EXPIRED` (410), sem reserva. A confirmação revalida disponibilidade e
+limite semanal. Repeti-la retorna o mesmo agendamento pela idempotência do núcleo,
+inclusive após a validade de uma ação já concluída. O resultado aparece em
+`appointments`. IDs de conversas alheias retornam `NOT_FOUND`; outras conversas,
+mesmo do próprio paciente, não podem confirmar essa proposta.
+
 ## Execução e proteção dos resultados
 
 `agent.Model` recebe mensagens, definições de ferramentas e, nas continuações, um
@@ -108,7 +148,7 @@ Uma continuação permite novas ferramentas ou a resposta final no schema fornec
 pelo módulo ativo. Tipos OpenAI ficam no adapter. Trocar esse adapter por um modelo
 simulado não altera o Scheduling Core.
 
-As duas ferramentas implementam a mesma interface interna `toolExecutor`, definida
+As três ferramentas implementam a mesma interface interna `toolExecutor`, definida
 em `internal/agent/tools.go`. Cada módulo fornece a definição da ferramenta e executa
 seus argumentos. As instâncias são criadas para cada mensagem, com o paciente
 autenticado ou as preferências da conversa já vinculados. A execução produz um de
@@ -119,7 +159,8 @@ dois resultados:
   `appointments.go`, fornece `appointment_answer` com os IDs da última consulta.
 - `replyToPatient` (responder ao paciente): resposta pronta que encerra a mensagem.
   `find_available_slots`, em `search.go`, usa esse resultado para disponibilidade e
-  esclarecimentos. A conversa pode continuar em uma nova mensagem.
+  esclarecimentos. `create_appointment`, em `booking.go`, apresenta a proposta ou
+  esclarecimento sem outra chamada ao modelo. A conversa pode continuar em uma nova mensagem.
 
 O loop encaminha o schema e as instruções de `returnToModel` à próxima chamada.
 O adapter serializa o nome e o conteúdo recebidos com `strict: true`. A definição
@@ -146,8 +187,10 @@ de horários, que encerra a mensagem com sua própria resposta.
 
 `agent.ConversationStore` abstrai armazenamento e atualização atômica de estado e
 histórico. A implementação em memória isola por ID e paciente, serializa mensagens
-da mesma conversa, respeita cancelamento ao esperar e só grava alterações após
-sucesso. Conversas distintas podem avançar em paralelo. O histórico conserva as
+da mesma conversa e respeita cancelamento ao esperar. Uma mensagem que não confirma
+revoga a proposta anterior antes de executar o modelo; essa revogação sobrevive a
+falhas e cancelamento. As demais alterações são gravadas somente após sucesso.
+Conversas distintas podem avançar em paralelo. O histórico conserva as
 últimas dez interações completas; preferências estruturadas permanecem. Reiniciar
 o processo perde as conversas, e IDs antigos retornam `NOT_FOUND` (404). Esta fase
 não oferece memória compartilhada entre instâncias nem persistência em banco.
@@ -158,9 +201,9 @@ a 30 segundos, inclusive quando o timeout HTTP está desabilitado para debug.
 Respostas do fornecedor têm limite de 1 MiB e 2048 tokens de saída. O adapter
 envia `store: false`. A mensagem do paciente e os dados da consulta são enviados
 ao fornecedor configurado; use dados fictícios no roteiro local. Logs HTTP não
-registram esse conteúdo nem a chave. Uma busca de horários usa uma chamada de API;
-consultar agendamentos normalmente usa duas. Ambas estão sujeitas à cobrança da
-conta do fornecedor.
+registram esse conteúdo nem a chave. Uma busca de horários ou preparação usa uma chamada de API;
+consultar agendamentos normalmente usa duas. Essas chamadas estão sujeitas à cobrança da
+conta do fornecedor. Confirmações reconhecidas não chamam o fornecedor.
 
 Erros mantêm o envelope HTTP existente: `INVALID_INPUT` (400), `UNAUTHORIZED`
 (401), `MODEL_INVALID_RESPONSE` ou `AGENT_STEP_LIMIT` (502), `AGENT_UNAVAILABLE`
