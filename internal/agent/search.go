@@ -28,7 +28,12 @@ type Availability struct {
 	Expanded bool      `json:"expanded"`
 }
 
-func searchTool() Tool {
+type slotSearch struct {
+	core        *application.Service
+	preferences *SearchPreferences
+}
+
+func (*slotSearch) definition() Tool {
 	return Tool{
 		Name: "find_available_slots",
 		Description: "Busca horários reais por nome de médico/especialidade e atualiza preferências. " +
@@ -37,28 +42,28 @@ func searchTool() Tool {
 	}
 }
 
-func clarification(message string) Result {
-	return Result{Message: message, Appointments: []Appointment{}}
+func clarification(message string) replyToPatient {
+	return replyToPatient{result: Result{Message: message, Appointments: []Appointment{}}}
 }
 
-func (a *Agent) search(ctx context.Context, raw json.RawMessage, preferences *SearchPreferences) (Result, error) {
-	next, question, err := preferences.refine(raw, a.core.Clock, a.core.Location)
+func (s *slotSearch) execute(ctx context.Context, raw json.RawMessage) (toolOutcome, error) {
+	next, question, err := s.preferences.refine(raw, s.core.Clock, s.core.Location)
 	if err != nil {
-		return Result{}, err
+		return nil, err
 	}
 
 	if question != "" {
 		return clarification(question), nil
 	}
 
-	doctors, err := a.core.ListDoctors(ctx, uuid.Nil)
+	doctors, err := s.core.ListDoctors(ctx, uuid.Nil)
 	if err != nil {
-		return Result{}, err
+		return nil, err
 	}
 
-	specialties, err := a.core.ListSpecialties(ctx)
+	specialties, err := s.core.ListSpecialties(ctx)
 	if err != nil {
-		return Result{}, err
+		return nil, err
 	}
 
 	doctorNames, specialtyNames := map[uuid.UUID]string{}, map[uuid.UUID]string{}
@@ -90,7 +95,7 @@ func (a *Agent) search(ctx context.Context, raw json.RawMessage, preferences *Se
 		}
 	}
 
-	found, err := a.core.FindSlots(
+	found, err := s.core.FindSlots(
 		ctx,
 		application.SearchInput{
 			DoctorID:    doctorID,
@@ -105,7 +110,7 @@ func (a *Agent) search(ctx context.Context, raw json.RawMessage, preferences *Se
 			return clarification("Informe um intervalo futuro de até oito semanas."), nil
 		}
 
-		return Result{}, err
+		return nil, err
 	}
 
 	availability := &Availability{
@@ -134,12 +139,14 @@ func (a *Agent) search(ctx context.Context, raw json.RawMessage, preferences *Se
 	}
 
 	for _, row := range found.Slots {
-		slot := Slot{ID: row.ID, DoctorName: row.DoctorName, StartsAt: row.StartsAt.In(a.core.Location)}
+		slot := Slot{ID: row.ID, DoctorName: row.DoctorName, StartsAt: row.StartsAt.In(s.core.Location)}
 		availability.Slots = append(availability.Slots, slot)
 		fmt.Fprintf(&message, "\n- %s com %s.", slot.StartsAt.Format("02/01/2006 às 15:04 -07:00"), slot.DoctorName)
 	}
 
-	return Result{Message: message.String(), Appointments: []Appointment{}, Availability: availability}, nil
+	return replyToPatient{result: Result{
+		Message: message.String(), Appointments: []Appointment{}, Availability: availability,
+	}}, nil
 }
 
 func normalizeName(name string) string {
