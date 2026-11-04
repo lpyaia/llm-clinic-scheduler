@@ -148,21 +148,29 @@ Uma continuação permite novas ferramentas ou a resposta final no schema fornec
 pelo módulo ativo. Tipos OpenAI ficam no adapter. Trocar esse adapter por um modelo
 simulado não altera o Scheduling Core.
 
-A interface interna `toolExecutor`, definida em `internal/agent/tools.go`, fornece
-as definições e executa os argumentos das ferramentas. Consulta e busca ficam nos
-respectivos módulos; o fluxo implementa a preparação de booking em `booking.go`.
-As instâncias são criadas para cada mensagem, com o paciente autenticado ou as
-preferências da conversa já vinculados. A execução produz um de dois resultados:
+A interface `tools.Executor`, definida em `internal/agent/tools/tools.go`, fornece
+as definições e executa os argumentos das ferramentas. Consulta, busca e preparação
+ficam no package `tools`; nenhuma delas conhece `Agent`, `conversationFlow` ou o
+armazenamento da conversa. As instâncias recebem apenas o núcleo e os schemas.
+Cada execução recebe `tools.Input`: identidade autenticada pela aplicação,
+preferências por valor, seleção por valor e uma cópia dos horários apresentados.
+Argumentos do modelo nunca escolhem a identidade. A execução produz um de dois resultados:
 
-- `returnToModel` (retornar ao modelo): dados, schema nomeado, instruções de resposta
+- `tools.ReturnToModel` (retornar ao modelo): dados, schema nomeado, instruções de resposta
   e um finalizador que verifica a resposta posterior. `list_appointments`, em
   `appointments.go`, fornece `appointment_answer` com os IDs da última consulta.
-- `replyToPatient` (responder ao paciente): resposta pronta que encerra a mensagem.
+- `tools.ReplyToPatient` (responder ao paciente): resposta pronta que encerra a mensagem.
   `find_available_slots`, em `search.go`, usa esse resultado para disponibilidade e
   esclarecimentos. `create_appointment`, em `booking.go`, apresenta a proposta ou
   esclarecimento sem outra chamada ao modelo. A conversa pode continuar em uma nova mensagem.
 
-O loop encaminha o schema e as instruções de `returnToModel` à próxima chamada.
+O fluxo aplica os valores retornados em `Search` e `Booking`, incluindo escolhas
+incompletas e preferências preservadas durante esclarecimentos. A busca refina uma
+cópia local; a preparação valida a seleção contra `Input.Offered`, sem acessar a
+implementação da busca. Nenhuma ferramenta recebe ponteiros para o estado da conversa.
+Em erro, não há atualização retornada para aplicar. A gravação continua a cargo do turno.
+
+O loop encaminha o schema e as instruções de `tools.ReturnToModel` à próxima chamada.
 O adapter serializa o nome e o conteúdo recebidos com `strict: true`. A definição
 JSON continua em `internal/agent/schemas/appointment_answer.json`, embutida por
 `schemas.go`. A busca de horários responde ao paciente durante a seleção de tool.
@@ -179,11 +187,37 @@ ordem. O servidor verifica essa lista e monta a mensagem em português com os
 dados reais, inclusive a ausência de resultados. O resultado da ferramenta e a
 resposta HTTP omitem identidade, telefone e outros campos desnecessários.
 
-O módulo de consulta conserva apenas a última lista obtida durante a execução da
-mensagem. Uma consulta posterior substitui essa lista, inclusive quando retorna
-vazia. O finalizador e os resultados são descartados ao encerrar a mensagem; uma
+Cada execução da consulta devolve um finalizador que captura somente os seus
+resultados, sem I/O nem retorno ao fluxo ou à ferramenta. O loop conserva apenas o
+último finalizador da mensagem. Uma consulta posterior substitui essa lista,
+inclusive quando retorna vazia. O finalizador e os resultados são descartados ao encerrar a mensagem; uma
 nova mensagem exige uma nova consulta. O loop permite trocar de listagem para busca
 de horários, que encerra a mensagem com sua própria resposta.
+
+### Mapa de dependências
+
+```text
+agent (entrada autenticada, fluxo, armazenamento e loop)
+  -> tools (consulta, busca, preparação e apresentação)
+  -> contract (mensagens, dados apresentados e validação JSON)
+tools -> contract, application, domain
+contract -> domain (erro de resposta inválida)
+application -> domain
+```
+
+`contract` define mensagens e dados compartilhados sem importar a implementação do
+agente. `agent` mantém aliases para preservar os tipos usados pelo HTTP e pelo adapter
+do modelo; não há implementações paralelas. `SearchPreferences`, em
+`tools/preferences.go`, é um valor opaco com zero value utilizável, independente de
+qualquer instância de busca. O fluxo guarda esse valor e aplica apenas os valores
+devolvidos. `contract.DecodeObject` é a única implementação de validação de objetos,
+campos desconhecidos e chaves duplicadas, usada nos argumentos e nas respostas finais.
+`tools/presentation.go` reúne esclarecimentos, nomes de categorias e apresentação
+de agendamentos, reutilizada também na confirmação pelo fluxo.
+
+Os schemas de produção continuam em `internal/agent/schemas/*.json`, embutidos
+exclusivamente por `internal/agent/schemas.go` e fornecidos às ferramentas na composição.
+Tipos específicos do fornecedor continuam no adapter.
 
 O módulo de fluxo (`internal/agent/flow.go` e os métodos em `booking.go`) é dono
 de `Conversation` e de suas transições. `Agent.ReplyConversation` valida a entrada

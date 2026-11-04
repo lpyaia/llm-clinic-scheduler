@@ -1,10 +1,11 @@
-package agent
+package tools
 
 import (
 	"encoding/json"
 	"strings"
 	"time"
 
+	"github.com/lpyaia/llm-clinic-scheduler/internal/agent/contract"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/application"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/domain"
 )
@@ -41,8 +42,8 @@ func (p *SearchPreferences) refine(
 	var args struct {
 		Doctor, Specialty, Period, Date, From, To *string
 	}
-	if err := decodeObject(raw, &args, "doctor", "specialty", "period", "date", "from", "to"); err != nil {
-		return searchCriteria{}, "", invalidResponse()
+	if err := contract.DecodeObject(raw, &args, "doctor", "specialty", "period", "date", "from", "to"); err != nil {
+		return searchCriteria{}, "", contract.InvalidResponse()
 	}
 
 	next := *p
@@ -60,7 +61,7 @@ func (p *SearchPreferences) refine(
 	}
 
 	if _, _, err := domain.PeriodBounds(next.criteria.Period); err != nil {
-		return searchCriteria{}, "", invalidResponse()
+		return searchCriteria{}, "", contract.InvalidResponse()
 	}
 
 	question := ""
@@ -118,7 +119,7 @@ func (p *SearchPreferences) resolveDates(
 
 			weekday, ok := weekdays[*date]
 			if !ok {
-				return invalidResponse()
+				return contract.InvalidResponse()
 			}
 
 			base := p.windowFrom
@@ -165,7 +166,7 @@ func (p *SearchPreferences) resolveDates(
 
 		parsed, err := time.Parse(time.RFC3339, *field.input)
 		if err != nil {
-			return invalidResponse()
+			return contract.InvalidResponse()
 		}
 
 		*field.target = parsed.In(location)

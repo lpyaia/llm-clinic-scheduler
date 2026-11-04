@@ -3,14 +3,13 @@ package agent
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"slices"
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/lpyaia/llm-clinic-scheduler/internal/agent/contract"
+	"github.com/lpyaia/llm-clinic-scheduler/internal/agent/tools"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/application"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/domain"
 )
@@ -51,14 +50,6 @@ func New(core *application.Service, model Model) *Agent {
 
 func NewWithConversations(core *application.Service, model Model, conversations ConversationStore) *Agent {
 	return &Agent{core: core, model: model, conversations: conversations}
-}
-
-type Result struct {
-	ConversationID uuid.UUID      `json:"conversation_id"`
-	Message        string         `json:"message"`
-	Appointments   []Appointment  `json:"appointments"`
-	Availability   *Availability  `json:"availability,omitempty"`
-	PendingAction  *PendingAction `json:"pending_action,omitempty"`
 }
 
 // Reply starts a new conversation. Follow-ups use the returned conversation ID.
@@ -144,7 +135,7 @@ func (a *Agent) replyWithModel(ctx context.Context, message string, flow *conver
 
 	system := in.Messages[0].Content
 
-	var finalize answerFinalizer
+	var finalize tools.AnswerFinalizer
 
 	seenCalls := make(map[string]bool)
 
@@ -164,19 +155,19 @@ func (a *Agent) replyWithModel(ctx context.Context, message string, flow *conver
 
 		if len(response.ToolCalls) == 0 {
 			if finalize == nil {
-				return Result{}, invalidResponse()
+				return Result{}, contract.InvalidResponse()
 			}
 
 			return finalize(response.Content)
 		}
 
 		if len(response.ToolCalls) != 1 || len(bytes.TrimSpace(response.Content)) != 0 {
-			return Result{}, invalidResponse()
+			return Result{}, contract.InvalidResponse()
 		}
 
 		call := response.ToolCalls[0]
 		if call.ID == "" || seenCalls[call.ID] {
-			return Result{}, invalidResponse()
+			return Result{}, contract.InvalidResponse()
 		}
 
 		outcome, err := flow.executeTool(ctx, call)
@@ -187,71 +178,22 @@ func (a *Agent) replyWithModel(ctx context.Context, message string, flow *conver
 		seenCalls[call.ID] = true
 
 		switch out := outcome.(type) {
-		case returnToModel:
-			finalize = out.finalize
+		case tools.ReturnToModel:
+			finalize = out.Finalize
 			in.RequireTool = false
-			in.ResponseSchema = &out.responseSchema
-			in.Messages[0].Content = system + "\n" + out.instructions
+			in.ResponseSchema = &out.ResponseSchema
+			in.Messages[0].Content = system + "\n" + out.Instructions
 			in.Messages = append(
 				in.Messages,
 				Message{Role: "assistant", ToolCalls: response.ToolCalls},
-				Message{Role: "tool", Content: string(out.content), ToolCallID: call.ID},
+				Message{Role: "tool", Content: string(out.Content), ToolCallID: call.ID},
 			)
-		case replyToPatient:
-			return out.result, nil
+		case tools.ReplyToPatient:
+			return out.Result, nil
 		default:
-			return Result{}, invalidResponse()
+			return Result{}, contract.InvalidResponse()
 		}
 	}
 
 	return Result{}, domain.Failure("AGENT_STEP_LIMIT", "O assistente atingiu o limite de etapas. Tente novamente.")
-}
-
-func decodeObject(raw []byte, out any, fields ...string) error {
-	raw = bytes.TrimSpace(raw)
-	if len(raw) == 0 || raw[0] != '{' {
-		return invalidResponse()
-	}
-
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	if _, err := decoder.Token(); err != nil {
-		return err
-	}
-
-	keys := make(map[string]bool)
-
-	for decoder.More() {
-		key, err := decoder.Token()
-		if err != nil {
-			return err
-		}
-
-		name, ok := key.(string)
-		if !ok || keys[name] || !slices.Contains(fields, name) {
-			return invalidResponse()
-		}
-
-		keys[name] = true
-
-		if err := decoder.Decode(new(json.RawMessage)); err != nil {
-			return err
-		}
-	}
-
-	decoder = json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-
-	if err := decoder.Decode(out); err != nil {
-		return err
-	}
-
-	if decoder.Decode(new(any)) != io.EOF {
-		return invalidResponse()
-	}
-
-	return nil
-}
-
-func invalidResponse() error {
-	return domain.Failure("MODEL_INVALID_RESPONSE", "O assistente retornou uma resposta inválida. Tente novamente.")
 }

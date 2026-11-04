@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lpyaia/llm-clinic-scheduler/internal/agent/contract"
+	"github.com/lpyaia/llm-clinic-scheduler/internal/agent/tools"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/application"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/domain"
 )
@@ -21,11 +23,6 @@ type Conversation struct {
 	Selection BookingSelection
 	Proposal  *PendingAction
 	Completed *CompletedAction
-}
-
-type BookingSelection struct {
-	SlotID   uuid.UUID `json:"selected_slot_id"`
-	Category string    `json:"category"`
 }
 
 // CompletedAction retains only the core's idempotency reference, never a proposal.
@@ -61,7 +58,7 @@ type conversationFlow struct {
 	core      *application.Service
 	principal domain.Principal
 	state     Conversation
-	handlers  map[string]toolExecutor
+	handlers  map[string]tools.Executor
 }
 
 // Confirmations must not wait for a proposal that has not been presented yet.
@@ -90,7 +87,7 @@ func (f *conversationFlow) replyWithoutModel(ctx context.Context, message string
 		return out, true, err
 	case explicitRefusal(message):
 		f.state.Selection = BookingSelection{}
-		out := clarification("Proposta descartada. Nenhum novo agendamento foi realizado.").result
+		out := tools.Clarification("Proposta descartada. Nenhum novo agendamento foi realizado.")
 
 		return out, true, nil
 	default:
@@ -137,14 +134,10 @@ func (f *conversationFlow) request(message string) (Request, error) {
 		Messages:    []Message{{Role: "system", Content: system}},
 		RequireTool: true,
 	}
-	f.handlers = make(map[string]toolExecutor)
+	f.handlers = make(map[string]tools.Executor)
 
-	for _, handler := range []toolExecutor{
-		&appointmentQuery{core: f.core, principal: f.principal},
-		&slotSearch{core: f.core, preferences: &f.state.Search},
-		f,
-	} {
-		definition := handler.definition()
+	for _, handler := range tools.New(f.core, toolSchemas) {
+		definition := handler.Definition()
 		f.handlers[definition.Name] = handler
 		in.Tools = append(in.Tools, definition)
 	}
@@ -155,10 +148,10 @@ func (f *conversationFlow) request(message string) (Request, error) {
 	return in, nil
 }
 
-func (f *conversationFlow) executeTool(ctx context.Context, call ToolCall) (toolOutcome, error) {
+func (f *conversationFlow) executeTool(ctx context.Context, call ToolCall) (tools.Outcome, error) {
 	handler, ok := f.handlers[call.Name]
 	if !ok {
-		return nil, invalidResponse()
+		return nil, contract.InvalidResponse()
 	}
 
 	f.state.Intent = call.Name
@@ -168,13 +161,29 @@ func (f *conversationFlow) executeTool(ctx context.Context, call ToolCall) (tool
 		f.state.Proposal, f.state.Completed = nil, nil
 	}
 
-	outcome, err := handler.execute(ctx, call.Arguments)
+	outcome, err := handler.Execute(ctx, tools.Input{
+		Principal: f.principal,
+		Search:    f.state.Search,
+		Selection: f.state.Selection,
+		Offered:   append([]Slot(nil), f.state.Offered...),
+	}, call.Arguments)
 	if err != nil {
 		return nil, err
 	}
 
-	if reply, ok := outcome.(replyToPatient); ok && reply.result.Availability != nil {
-		f.state.Offered = append([]Slot(nil), reply.result.Availability.Slots...)
+	if reply, ok := outcome.(tools.ReplyToPatient); ok {
+		if reply.Search != nil {
+			f.state.Search = *reply.Search
+		}
+
+		if reply.Booking != nil {
+			f.state.Selection = reply.Booking.Selection
+			f.state.Proposal = reply.Booking.Proposal
+		}
+
+		if reply.Result.Availability != nil {
+			f.state.Offered = append([]Slot(nil), reply.Result.Availability.Slots...)
+		}
 	}
 
 	return outcome, nil
