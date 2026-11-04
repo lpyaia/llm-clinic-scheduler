@@ -10,3 +10,6 @@ var appointmentAnswerSchema string
 
 //go:embed schemas/find_available_slots.json
 var findAvailableSlotsSchema string
+
+//go:embed schemas/create_appointment.json
+var createAppointmentSchema string

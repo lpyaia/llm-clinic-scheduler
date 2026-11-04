@@ -148,7 +148,6 @@ func render(rows []Appointment) string {
 		return "Você não tem atendimentos para os filtros consultados."
 	}
 
-	categories := map[string]string{"consultation": "consulta", "exam": "exame", "procedure": "procedimento"}
 	statuses := map[string]string{
 		domain.Scheduled: "agendado",
 		domain.Cancelled: "cancelado",
@@ -163,7 +162,7 @@ func render(rows []Appointment) string {
 			&text,
 			"\n- %s — %s com %s (%s).",
 			row.StartsAt.Format("02/01/2006 às 15:04 -07:00"),
-			categories[row.Category],
+			categoryName(row.Category),
 			row.DoctorName,
 			statuses[row.Status],
 		)
