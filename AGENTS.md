@@ -15,6 +15,28 @@ Do not compress an entire function into one continuous block just because gofmt 
 
 After finishing your implementation, run `golangci-lint run --fix` to automatically update formatting.
 
+## Control flow and module interfaces
+
+- Keep use-case coordination readable in execution order. Give one place responsibility for sequencing the steps;
+  keep business decisions with the module that owns the relevant state and invariants.
+- Prefer direct calls and explicit results. Do not split a straight-line operation across callbacks merely to keep
+  methods on different types or to satisfy a responsibility statement literally.
+- Avoid orchestration that alternates between the same modules through callbacks. For example,
+  `Agent -> flow.reply -> callback -> Agent.reply -> flow.request` obscures who controls the turn.
+  Reorganize the coordination or the module interface so that the caller can follow the operation in one direction.
+- A callback must represent a concrete variation or a well-defined scoped operation, such as a transaction.
+  Its contract must make supplied state, allowed operations, lifetime and failure behavior explicit.
+  Do not require callbacks to capture and re-enter the object invoking them to complete that object's own operation.
+  For scoped access, prefer passing the capability needed by the callback, such as a transaction handle.
+- Moving coordination must preserve lock duration, cancellation, intermediate saves and rollback behavior.
+  Document required ordering at the interface; do not replace hidden callback coupling with undocumented
+  `begin`/`finish` obligations spread across callers.
+- Introduce an interface, callback or forwarding layer only when it hides meaningful complexity or supports
+  a concrete variation required by the current work. State that purpose when proposing the abstraction.
+- During design and review, trace one complete successful path and one failure path across the changed modules.
+  Identify who sequences the work, owns each state transition, holds and releases access, and commits changes.
+  Flag unnecessary round trips even when individual methods have narrow responsibilities and all tests pass.
+
 ## Text and schema formatting
 
 - Limit maintained text files to 120 characters per line, including tests, comments and string literals.

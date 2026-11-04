@@ -31,7 +31,7 @@ func (p SearchPreferences) MarshalJSON() ([]byte, error) {
 }
 
 // refine applies one tool call atomically. Clarifications retain valid updates;
-// malformed arguments leave preferences unchanged. ConversationStore owns rollback
+// malformed arguments leave preferences unchanged. The conversational flow owns rollback
 // if a later catalog or availability lookup fails.
 func (p *SearchPreferences) refine(
 	raw json.RawMessage,
