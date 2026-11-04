@@ -89,7 +89,7 @@ núcleo; a aplicação exige confirmação explícita em uma mensagem posterior.
    O módulo de preferências em `internal/agent/preferences.go` concentra atualização,
    limpeza, esclarecimento e resolução de datas. A busca recebe os critérios resolvidos
    e mantém a resolução de nomes no catálogo. O contexto JSON enviado ao modelo preserva
-   o formato existente; o armazenamento da conversa confirma preferências e histórico
+   o formato existente; o fluxo grava preferências e histórico
    juntos após o sucesso da interação.
 
    `application.Service.FindSlots` mantém a política existente: sem fim explícito,
@@ -148,11 +148,11 @@ Uma continuação permite novas ferramentas ou a resposta final no schema fornec
 pelo módulo ativo. Tipos OpenAI ficam no adapter. Trocar esse adapter por um modelo
 simulado não altera o Scheduling Core.
 
-As três ferramentas implementam a mesma interface interna `toolExecutor`, definida
-em `internal/agent/tools.go`. Cada módulo fornece a definição da ferramenta e executa
-seus argumentos. As instâncias são criadas para cada mensagem, com o paciente
-autenticado ou as preferências da conversa já vinculados. A execução produz um de
-dois resultados:
+A interface interna `toolExecutor`, definida em `internal/agent/tools.go`, fornece
+as definições e executa os argumentos das ferramentas. Consulta e busca ficam nos
+respectivos módulos; o fluxo implementa a preparação de booking em `booking.go`.
+As instâncias são criadas para cada mensagem, com o paciente autenticado ou as
+preferências da conversa já vinculados. A execução produz um de dois resultados:
 
 - `returnToModel` (retornar ao modelo): dados, schema nomeado, instruções de resposta
   e um finalizador que verifica a resposta posterior. `list_appointments`, em
@@ -185,15 +185,53 @@ vazia. O finalizador e os resultados são descartados ao encerrar a mensagem; um
 nova mensagem exige uma nova consulta. O loop permite trocar de listagem para busca
 de horários, que encerra a mensagem com sua própria resposta.
 
-`agent.ConversationStore` abstrai armazenamento e atualização atômica de estado e
-histórico. A implementação em memória isola por ID e paciente, serializa mensagens
-da mesma conversa e respeita cancelamento ao esperar. Uma mensagem que não confirma
-revoga a proposta anterior antes de executar o modelo; essa revogação sobrevive a
-falhas e cancelamento. As demais alterações são gravadas somente após sucesso.
-Conversas distintas podem avançar em paralelo. O histórico conserva as
-últimas dez interações completas; preferências estruturadas permanecem. Reiniciar
-o processo perde as conversas, e IDs antigos retornam `NOT_FOUND` (404). Esta fase
-não oferece memória compartilhada entre instâncias nem persistência em banco.
+O módulo de fluxo (`internal/agent/flow.go` e os métodos em `booking.go`) é dono
+de `Conversation` e de suas transições. `Agent` valida a entrada autenticada e
+executa o loop do modelo. O fluxo interpreta as mesmas frases completas de
+confirmação e recusa descritas acima; não delega essa interpretação ao modelo.
+A busca retorna disponibilidade ou esclarecimento sem acessar estado de booking.
+Ao iniciar uma busca, o fluxo limpa horários apresentados, seleção e proposta,
+inclusive quando a busca termina em esclarecimento.
+
+O estado distingue horários apresentados (`Offered`), escolha ainda incompleta
+(`Selection`), proposta apresentada aguardando resposta (`Proposal`) e referência
+à ação concluída para reenvios (`Completed`). Confirmar com sucesso remove a
+proposta e guarda somente o ID da ação concluída. Reenvios consultam a idempotência
+do núcleo, inclusive após a validade original. Revogar essa referência não cancela
+um agendamento já realizado. Uma confirmação expirada continua retornando
+`ACTION_EXPIRED` em novas tentativas; ownership, validade e disponibilidade são
+sempre revalidados pelo núcleo.
+
+`agent.ConversationStore.Acquire` valida ownership e entrega acesso exclusivo
+(`LockedConversation`). `CreateConversation` autoriza criar um ID novo; um
+follow-up não pode criar IDs desconhecidos. O fluxo escolhe acesso imediato para
+confirmações (`Wait: false`) e converte ocupação em `INVALID_INPUT`, impedindo que
+uma confirmação espere por uma proposta ainda não apresentada. Demais mensagens
+esperam com cancelamento. Conversas distintas podem avançar em paralelo.
+O armazenamento não reconhece confirmação, recusa, proposta ou operação de booking.
+
+`Snapshot` entrega uma cópia independente. O fluxo usa `Save` explicitamente em
+dois momentos: antes de processar uma mensagem que não confirma, para revogar
+proposta ou referência concluída existente; e após uma resposta bem-sucedida,
+para gravar as demais transições, preferências e histórico. Cada gravação é uma
+cópia independente e permanece em memória mesmo se a execução posterior falhar.
+Uma falha do modelo, ferramenta ou cancelamento preserva a revogação já gravada,
+mas descarta alterações posteriores de escolhas, preferências e histórico.
+Se a nova busca falhar, as escolhas anteriores permanecem, exigindo preparar e
+apresentar outra proposta antes de confirmar. Sem gravação bem-sucedida, uma
+conversa nova é removida ao liberar o acesso. O fluxo sempre libera o acesso,
+inclusive em falhas; `Save` recusa um contexto já cancelado.
+
+Se o núcleo concluir uma confirmação e a gravação final da conversa falhar ou for
+cancelada, o ID anterior continua disponível no estado já gravado. Uma confirmação
+posterior repete esse ID pelo núcleo e recupera o mesmo agendamento, sem duplicar.
+Preparar uma ação sem conseguir gravar a resposta não concede autoridade para
+confirmá-la: somente a proposta apresentada e gravada na conversa pode ser usada.
+
+O histórico conserva as últimas dez interações completas; preferências estruturadas
+permanecem. Reiniciar o processo perde as conversas, e IDs antigos retornam
+`NOT_FOUND` (404). Esta fase não oferece memória compartilhada entre instâncias
+nem persistência de conversas em banco.
 
 O timeout HTTP configurado se
 propaga ao modelo e ao banco; o cliente do fornecedor também limita cada chamada

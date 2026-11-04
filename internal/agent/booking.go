@@ -4,22 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/application"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/domain"
 )
-
-// BookingState holds the offered choices and the action bound to this conversation.
-// ActionID never comes from model arguments and survives successful confirmation for retries.
-type BookingState struct {
-	Offered  []Slot    `json:"offered_slots"`
-	SlotID   uuid.UUID `json:"selected_slot_id"`
-	Category string    `json:"category"`
-	ActionID uuid.UUID `json:"-"`
-}
 
 type PendingAction struct {
 	ID        uuid.UUID `json:"id"`
@@ -28,13 +18,7 @@ type PendingAction struct {
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
-type bookingPreparation struct {
-	core      *application.Service
-	principal domain.Principal
-	state     *BookingState
-}
-
-func (*bookingPreparation) definition() Tool {
+func (*conversationFlow) definition() Tool {
 	return Tool{
 		Name: "create_appointment",
 		Description: "Prepara um agendamento para um horário apresentado e categoria escolhida. " +
@@ -43,7 +27,7 @@ func (*bookingPreparation) definition() Tool {
 	}
 }
 
-func (b *bookingPreparation) execute(ctx context.Context, raw json.RawMessage) (toolOutcome, error) {
+func (f *conversationFlow) execute(ctx context.Context, raw json.RawMessage) (toolOutcome, error) {
 	var args struct {
 		SlotID   *string `json:"slot_id"`
 		Category *string `json:"category"`
@@ -57,52 +41,53 @@ func (b *bookingPreparation) execute(ctx context.Context, raw json.RawMessage) (
 	}
 
 	if args.SlotID != nil {
-		b.state.SlotID = uuid.Nil
+		f.state.Selection.SlotID = uuid.Nil
 		if *args.SlotID != "" {
 			id, err := uuid.Parse(*args.SlotID)
 			if err != nil {
 				return nil, invalidResponse()
 			}
 
-			b.state.SlotID = id
+			f.state.Selection.SlotID = id
 		}
 	}
 
 	if args.Category != nil {
-		b.state.Category = *args.Category
+		f.state.Selection.Category = *args.Category
 	}
 
 	found := false
 
-	for _, slot := range b.state.Offered {
-		if slot.ID == b.state.SlotID {
+	for _, slot := range f.state.Offered {
+		if slot.ID == f.state.Selection.SlotID {
 			found = true
 		}
 	}
 
 	if !found {
-		b.state.SlotID = uuid.Nil
+		f.state.Selection.SlotID = uuid.Nil
 		return clarification("Qual dos horários apresentados você deseja? Se necessário, faça uma nova busca."), nil
 	}
 
-	if !domain.ValidCategory(b.state.Category) {
+	if !domain.ValidCategory(f.state.Selection.Category) {
 		return clarification("Qual categoria deseja: consulta, exame ou procedimento?"), nil
 	}
 
-	action, err := b.core.Prepare(ctx, b.principal, application.PrepareInput{
+	action, err := f.core.Prepare(ctx, f.principal, application.PrepareInput{
 		Operation: domain.CreateAppointment,
-		SlotID:    b.state.SlotID,
-		Category:  b.state.Category,
+		SlotID:    f.state.Selection.SlotID,
+		Category:  f.state.Selection.Category,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	b.state.ActionID = action.ID
 	proposal := &PendingAction{
 		ID: action.ID, Summary: action.Summary, Category: action.Category,
-		ExpiresAt: action.ExpiresAt.In(b.core.Location),
+		ExpiresAt: action.ExpiresAt.In(f.core.Location),
 	}
+	f.state.Proposal = proposal
+
 	result := Result{
 		Message: fmt.Sprintf(
 			"%s Categoria: %s. Válida até %s. Você confirma? Responda sim, confirmo para agendar.",
@@ -118,44 +103,32 @@ func categoryName(category string) string {
 	return map[string]string{"consultation": "consulta", "exam": "exame", "procedure": "procedimento"}[category]
 }
 
-func explicitConfirmation(message string) bool {
-	message = strings.TrimRight(strings.ToLower(strings.TrimSpace(message)), ".!")
-	message = strings.Join(strings.Fields(message), " ")
+func (f *conversationFlow) confirmBooking(ctx context.Context) (Result, error) {
+	var id uuid.UUID
 
-	switch message {
-	case "sim", "confirmo", "sim, confirmo", "sim confirmo", "pode agendar", "sim, pode agendar":
-		return true
-	default:
-		return false
+	if f.state.Proposal != nil {
+		id = f.state.Proposal.ID
+	} else if f.state.Completed != nil {
+		id = f.state.Completed.ID
 	}
-}
 
-func explicitRefusal(message string) bool {
-	message = strings.TrimRight(strings.ToLower(strings.TrimSpace(message)), ".!")
-
-	switch message {
-	case "não", "nao", "não quero", "nao quero", "não confirmo", "nao confirmo", "cancela", "desisto":
-		return true
-	default:
-		return false
-	}
-}
-
-func (a *Agent) confirmBooking(ctx context.Context, p domain.Principal, id uuid.UUID) (Result, error) {
 	if id == uuid.Nil {
 		return clarification(
 			"Não há proposta para confirmar nesta conversa. Escolha um horário e uma categoria.",
 		).result, nil
 	}
 
-	row, err := a.core.Confirm(ctx, p, id)
+	row, err := f.core.Confirm(ctx, f.principal, id)
 	if err != nil {
 		return Result{}, err
 	}
 
+	f.state.Proposal = nil
+	f.state.Completed = &CompletedAction{ID: id}
+
 	rows := []Appointment{{
 		ID: row.ID, DoctorName: row.DoctorName, Category: row.Category,
-		Status: row.Status, StartsAt: row.StartsAt.In(a.core.Location),
+		Status: row.Status, StartsAt: row.StartsAt.In(f.core.Location),
 	}}
 
 	return Result{Message: "Agendamento confirmado.\n" + render(rows), Appointments: rows}, nil

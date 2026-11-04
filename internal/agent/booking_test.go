@@ -298,6 +298,95 @@ func TestBookingNewSearchDiscardsThePreviousSelection(t *testing.T) {
 	assertBookings(t, core, p, 0)
 }
 
+func TestBookingDateClarificationDiscardsThePreviousSelection(t *testing.T) {
+	a, core, repo, p, proposal, next := preparedBooking(t)
+	*next = toolReply("search", "find_available_slots", `{"date":"clarify"}`)
+
+	out, err := a.ReplyConversation(context.Background(), p, proposal.ConversationID, "Em outra data")
+	if err != nil || !strings.Contains(out.Message, "Qual data") {
+		t.Fatalf("date clarification=%+v err=%v", out, err)
+	}
+
+	args := fmt.Sprintf(`{"slot_id":%q,"category":"exam"}`, repo.slots[0].ID)
+	*next = toolReply("old-slot", "create_appointment", args)
+
+	out, err = a.ReplyConversation(context.Background(), p, proposal.ConversationID, "O horário anterior para exame")
+	if err != nil || out.PendingAction != nil || !strings.Contains(out.Message, "Qual dos horários") {
+		t.Fatalf("clarification retained previous offered slots: %+v err=%v", out, err)
+	}
+
+	assertBookings(t, core, p, 0)
+}
+
+func TestBookingFailedSearchRollsBackChoicesAndPreferencesButRevokesProposal(t *testing.T) {
+	a, core, repo, p, proposal, next := preparedBooking(t)
+	failure := errors.New("availability lookup failed")
+	repo.slotsErr = failure
+	*next = toolReply("failed-search", "find_available_slots", `{"period":"morning"}`)
+	ctx := context.Background()
+
+	_, err := a.ReplyConversation(ctx, p, proposal.ConversationID, "Prefiro de manhã")
+	if !errors.Is(err, failure) {
+		t.Fatalf("expected availability failure, got %v", err)
+	}
+
+	out, err := a.ReplyConversation(ctx, p, proposal.ConversationID, "sim")
+	if err != nil || len(out.Appointments) != 0 || !strings.Contains(out.Message, "Não há proposta") {
+		t.Fatalf("failed search retained confirmation authority: %+v err=%v", out, err)
+	}
+
+	repo.slotsErr = nil
+	*next = toolReply("change-category", "create_appointment", `{"category":"exam"}`)
+
+	out, err = a.ReplyConversation(ctx, p, proposal.ConversationID, "O horário anterior para exame")
+	if err != nil || out.PendingAction == nil || out.PendingAction.Category != "exam" {
+		t.Fatalf("failed search lost previous selection: %+v err=%v", out, err)
+	}
+
+	*next = toolReply("search-again", "find_available_slots", `{}`)
+
+	out, err = a.ReplyConversation(ctx, p, proposal.ConversationID, "Busque com minhas preferências anteriores")
+	if err != nil || out.Availability == nil || len(out.Availability.Slots) != 1 ||
+		out.Availability.Slots[0].ID != repo.slots[0].ID {
+		t.Fatalf("failed search changed previous preferences: %+v err=%v", out, err)
+	}
+
+	assertBookings(t, core, p, 0)
+}
+
+func TestBookingCompletedActionReplaysAfterExpiryAndRefusalPreservesTheAppointment(t *testing.T) {
+	a, core, _, p, proposal, _ := preparedBooking(t)
+	ctx := context.Background()
+
+	confirmed, err := a.ReplyConversation(ctx, p, proposal.ConversationID, "sim")
+	if err != nil || len(confirmed.Appointments) != 1 || confirmed.PendingAction != nil {
+		t.Fatalf("confirmation=%+v err=%v", confirmed, err)
+	}
+
+	core.Clock = searchClock{proposal.PendingAction.ExpiresAt.Add(time.Minute)}
+
+	replayed, err := a.ReplyConversation(ctx, p, proposal.ConversationID, "sim")
+	if err != nil || len(replayed.Appointments) != 1 || replayed.PendingAction != nil ||
+		replayed.Appointments[0].ID != confirmed.Appointments[0].ID {
+		t.Fatalf("completed action must replay after proposal expiry: %+v err=%v", replayed, err)
+	}
+
+	_, err = a.ReplyConversation(ctx, p, proposal.ConversationID, "não")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := a.ReplyConversation(ctx, p, proposal.ConversationID, "sim")
+	if err != nil || len(out.Appointments) != 0 || !strings.Contains(out.Message, "Não há proposta") {
+		t.Fatalf("refusal retained completed action reference: %+v err=%v", out, err)
+	}
+
+	rows := assertBookings(t, core, p, 1)
+	if rows[0].ID != confirmed.Appointments[0].ID || rows[0].Status != domain.Scheduled {
+		t.Fatalf("discarding retry reference changed confirmed booking: %+v", rows)
+	}
+}
+
 func TestBookingExpiredProposalCannotReserveASlot(t *testing.T) {
 	a, core, _, p, proposal, _ := preparedBooking(t)
 	core.Clock = searchClock{proposal.PendingAction.ExpiresAt}
