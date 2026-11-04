@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"slices"
@@ -66,6 +67,8 @@ func (a *Agent) Reply(ctx context.Context, principal domain.Principal, message s
 }
 
 // ReplyConversation uses only the authenticated principal to access conversation state.
+// It holds exclusive access through the entire turn. Revocation is saved before
+// processing; all remaining state and history are saved only after a valid reply.
 func (a *Agent) ReplyConversation(
 	ctx context.Context,
 	principal domain.Principal,
@@ -86,14 +89,54 @@ func (a *Agent) ReplyConversation(
 		return Result{}, domain.Failure("AGENT_UNAVAILABLE", "O assistente não está configurado.")
 	}
 
-	flow := &conversationFlow{core: a.core, principal: principal}
+	createConversation := id == uuid.Nil
+	if createConversation {
+		id = uuid.New()
+	}
 
-	return flow.reply(ctx, a.conversations, id, message, func() (Result, error) {
-		return a.reply(ctx, message, flow)
-	})
+	access := accessForMessage(message, createConversation)
+
+	locked, err := a.conversations.Acquire(ctx, principal.PatientID, id, access)
+	if errors.Is(err, ErrConversationBusy) {
+		return Result{}, domain.Failure(
+			"INVALID_INPUT",
+			"Aguarde a resposta da conversa e leia o resumo antes de confirmar novamente.",
+		)
+	}
+
+	if err != nil {
+		return Result{}, err
+	}
+
+	defer locked.Release()
+
+	flow := &conversationFlow{core: a.core, principal: principal, state: locked.Snapshot()}
+	if flow.revokeConfirmation(message) {
+		if err := locked.Save(ctx, flow.state); err != nil {
+			return Result{}, err
+		}
+	}
+
+	out, handled, err := flow.replyWithoutModel(ctx, message)
+	if !handled && err == nil {
+		out, err = a.replyWithModel(ctx, message, flow)
+	}
+
+	if err != nil {
+		return Result{}, err
+	}
+
+	out.ConversationID = id
+	flow.rememberExchange(message, out.Message)
+
+	if err := locked.Save(ctx, flow.state); err != nil {
+		return Result{}, err
+	}
+
+	return out, nil
 }
 
-func (a *Agent) reply(ctx context.Context, message string, flow *conversationFlow) (Result, error) {
+func (a *Agent) replyWithModel(ctx context.Context, message string, flow *conversationFlow) (Result, error) {
 	in, err := flow.request(message)
 	if err != nil {
 		return Result{}, err

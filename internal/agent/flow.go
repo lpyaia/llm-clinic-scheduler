@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"strings"
 	"time"
 
@@ -65,78 +64,50 @@ type conversationFlow struct {
 	handlers  map[string]toolExecutor
 }
 
-func (f *conversationFlow) reply(
-	ctx context.Context,
-	store ConversationStore,
-	id uuid.UUID,
-	message string,
-	complete func() (Result, error),
-) (Result, error) {
-	createConversation := id == uuid.Nil
-	if createConversation {
-		id = uuid.New()
+// Confirmations must not wait for a proposal that has not been presented yet.
+func accessForMessage(message string, createConversation bool) ConversationAccess {
+	return ConversationAccess{CreateConversation: createConversation, Wait: !explicitConfirmation(message)}
+}
+
+// revokeConfirmation reports whether the changed state must be saved before
+// processing the message, so a later failure cannot restore authority.
+func (f *conversationFlow) revokeConfirmation(message string) bool {
+	if explicitConfirmation(message) || (f.state.Proposal == nil && f.state.Completed == nil) {
+		return false
 	}
 
-	confirmation := explicitConfirmation(message)
-	access := ConversationAccess{CreateConversation: createConversation, Wait: !confirmation}
+	f.state.Proposal, f.state.Completed = nil, nil
 
-	locked, err := store.Acquire(ctx, f.principal.PatientID, id, access)
-	if errors.Is(err, ErrConversationBusy) {
-		return Result{}, domain.Failure(
-			"INVALID_INPUT",
-			"Aguarde a resposta da conversa e leia o resumo antes de confirmar novamente.",
-		)
-	}
+	return true
+}
 
-	if err != nil {
-		return Result{}, err
-	}
-
-	defer locked.Release()
-
-	f.state = locked.Snapshot()
-	if !confirmation && (f.state.Proposal != nil || f.state.Completed != nil) {
-		f.state.Proposal, f.state.Completed = nil, nil
-
-		// Commit revocation before any fallible processing. The remaining working
-		// state is saved only after a successful reply, preserving turn rollback.
-		if err := locked.Save(ctx, f.state); err != nil {
-			return Result{}, err
-		}
-	}
-
-	var out Result
-
+// replyWithoutModel handles confirmations and refusals. A false handled result
+// means the message requires model execution; it does not change the state.
+func (f *conversationFlow) replyWithoutModel(ctx context.Context, message string) (Result, bool, error) {
 	switch {
-	case confirmation:
-		out, err = f.confirmBooking(ctx)
+	case explicitConfirmation(message):
+		out, err := f.confirmBooking(ctx)
+		return out, true, err
 	case explicitRefusal(message):
 		f.state.Selection = BookingSelection{}
-		out = clarification("Proposta descartada. Nenhum novo agendamento foi realizado.").result
+		out := clarification("Proposta descartada. Nenhum novo agendamento foi realizado.").result
+
+		return out, true, nil
 	default:
-		out, err = complete()
+		return Result{}, false, nil
 	}
+}
 
-	if err != nil {
-		return Result{}, err
-	}
-
-	out.ConversationID = id
+func (f *conversationFlow) rememberExchange(message, reply string) {
 	f.state.History = append(
 		f.state.History,
 		Message{Role: "user", Content: message},
-		Message{Role: "assistant", Content: out.Message},
+		Message{Role: "assistant", Content: reply},
 	)
 	// Keep complete user/assistant pairs; tool transcripts stay request-local.
 	if len(f.state.History) > 20 {
 		f.state.History = f.state.History[len(f.state.History)-20:]
 	}
-
-	if err := locked.Save(ctx, f.state); err != nil {
-		return Result{}, err
-	}
-
-	return out, nil
 }
 
 func (f *conversationFlow) request(message string) (Request, error) {

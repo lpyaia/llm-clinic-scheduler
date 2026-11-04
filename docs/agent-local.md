@@ -186,8 +186,14 @@ nova mensagem exige uma nova consulta. O loop permite trocar de listagem para bu
 de horários, que encerra a mensagem com sua própria resposta.
 
 O módulo de fluxo (`internal/agent/flow.go` e os métodos em `booking.go`) é dono
-de `Conversation` e de suas transições. `Agent` valida a entrada autenticada e
-executa o loop do modelo. O fluxo interpreta as mesmas frases completas de
+de `Conversation` e de suas transições. `Agent.ReplyConversation` valida a entrada
+autenticada e coordena o turno em ordem: adquire acesso exclusivo, aplica e grava
+a revogação decidida pelo fluxo, obtém a resposta, grava o estado final e libera
+o acesso. O fluxo responde diretamente a confirmações e recusas; para as demais
+mensagens, `Agent.replyWithModel` executa o loop do modelo e chama as operações do
+fluxo. O fluxo não recebe callbacks nem chama `Agent`. Essa sequência mantém o
+acesso exclusivo durante todo o processamento, inclusive chamadas ao modelo e ao
+núcleo. O fluxo interpreta as mesmas frases completas de
 confirmação e recusa descritas acima; não delega essa interpretação ao modelo.
 A busca retorna disponibilidade ou esclarecimento sem acessar estado de booking.
 Ao iniciar uma busca, o fluxo limpa horários apresentados, seleção e proposta,
@@ -210,17 +216,18 @@ uma confirmação espere por uma proposta ainda não apresentada. Demais mensage
 esperam com cancelamento. Conversas distintas podem avançar em paralelo.
 O armazenamento não reconhece confirmação, recusa, proposta ou operação de booking.
 
-`Snapshot` entrega uma cópia independente. O fluxo usa `Save` explicitamente em
-dois momentos: antes de processar uma mensagem que não confirma, para revogar
-proposta ou referência concluída existente; e após uma resposta bem-sucedida,
-para gravar as demais transições, preferências e histórico. Cada gravação é uma
+`Snapshot` entrega uma cópia independente. O fluxo decide sobre a revogação e
+modifica sua cópia do estado; `Agent.ReplyConversation` usa `Save` explicitamente
+em dois momentos: antes de processar uma mensagem que não confirma, para gravar
+a revogação de proposta ou referência concluída existente; e após uma resposta
+bem-sucedida, para gravar as demais transições, preferências e histórico. Cada gravação é uma
 cópia independente e permanece em memória mesmo se a execução posterior falhar.
 Uma falha do modelo, ferramenta ou cancelamento preserva a revogação já gravada,
 mas descarta alterações posteriores de escolhas, preferências e histórico.
 Se a nova busca falhar, as escolhas anteriores permanecem, exigindo preparar e
 apresentar outra proposta antes de confirmar. Sem gravação bem-sucedida, uma
-conversa nova é removida ao liberar o acesso. O fluxo sempre libera o acesso,
-inclusive em falhas; `Save` recusa um contexto já cancelado.
+conversa nova é removida ao liberar o acesso. `Agent.ReplyConversation` libera o
+acesso por `defer`, inclusive em falhas; `Save` recusa um contexto já cancelado.
 
 Se o núcleo concluir uma confirmação e a gravação final da conversa falhar ou for
 cancelada, o ID anterior continua disponível no estado já gravado. Uma confirmação
