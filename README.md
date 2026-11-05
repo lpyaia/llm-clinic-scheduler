@@ -307,7 +307,11 @@ Buscas resolvem nomes pelo catálogo, convertem datas relativas no fuso da clín
 reutilizam a disponibilidade determinística; nomes ambíguos geram esclarecimento.
 Escolher um horário e categoria prepara uma proposta com resumo e validade, sem reservar.
 Uma confirmação explícita posterior, como “sim, confirmo”, executa apenas a proposta
-daquela conversa e paciente; repetir a confirmação retorna o mesmo agendamento.
+daquela conversa e paciente; o modelo interpreta a mensagem atual no contexto da proposta,
+sem listas fixas de frases. Repetir a confirmação retorna o mesmo agendamento. Perguntas,
+condições, recusas, alterações e falhas de interpretação revogam a autoridade anterior.
+Toda mensagem concorrente é rejeitada antes da interpretação; aguarde a resposta para reenviar.
+Veja a [decisão e política de falhas](docs/adr/0001-contextual-proposal-responses.md).
 O adapter OpenAI é opcional: configure `OPENAI_API_KEY` para habilitá-lo e
 `OPENAI_MODEL` para escolher um modelo compatível com Chat Completions, tools e
 Structured Outputs (padrão `gpt-4.1-mini`). Sem chave, apenas essa rota retorna

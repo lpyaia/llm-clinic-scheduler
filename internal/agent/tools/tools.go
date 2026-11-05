@@ -34,18 +34,20 @@ type Schemas struct {
 	AppointmentAnswer  json.RawMessage
 	FindAvailableSlots json.RawMessage
 	CreateAppointment  json.RawMessage
+	RespondToProposal  json.RawMessage
 }
 
-// New supplies the three supported tools; it is not a dynamic plugin registry.
+// New supplies the supported tools; the flow limits their availability per turn.
 func New(core *application.Service, schemas Schemas) []Executor {
 	return []Executor{
 		&appointmentQuery{core: core, schema: schemas},
 		&slotSearch{core: core, schema: schemas},
 		&bookingPreparation{core: core, schema: schemas},
+		&proposalResponse{schema: schemas.RespondToProposal},
 	}
 }
 
-// Outcome is either a model continuation or a complete patient reply.
+// Outcome returns a model continuation, a complete reply or a proposal decision.
 type Outcome interface {
 	toolOutcome()
 }

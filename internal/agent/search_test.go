@@ -535,7 +535,7 @@ func TestFailedTurnDoesNotChangeConversation(t *testing.T) {
 	}
 }
 
-func TestBusyConversationHonorsCancellationAndDoesNotBlockOthers(t *testing.T) {
+func TestBusyConversationRejectsEveryConcurrentMessageAndDoesNotBlockOthers(t *testing.T) {
 	core, _ := searchFixture()
 
 	entered, release := make(chan struct{}), make(chan struct{}, 1)
@@ -575,8 +575,8 @@ func TestBusyConversationHonorsCancellationAndDoesNotBlockOthers(t *testing.T) {
 	defer cancel()
 
 	_, err = a.ReplyConversation(ctx, p, first.ConversationID, "Mensagem concorrente")
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("waiting turn: %v", err)
+	if domain.ErrorCode(err) != "INVALID_INPUT" {
+		t.Fatalf("concurrent turn: %v", err)
 	}
 
 	otherCtx, otherCancel := context.WithTimeout(context.Background(), time.Second)
