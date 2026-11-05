@@ -25,10 +25,20 @@ paths:
         A resposta em português é montada pelo servidor a partir dos resultados reais.
         Criar prepara uma ação sem reservar; a resposta pending_action apresenta resumo,
         categoria e validade. Uma mensagem posterior como "sim, confirmo" confirma somente
-        a proposta desta conversa. Outra resposta invalida a proposta anterior;
+        a proposta desta conversa. O modelo interpreta a mensagem atual por respond_to_proposal
+        (confirm/reject/clarify), disponível somente para uma proposta válida ou reenvio de ação concluída.
+        A aplicação vincula ação, paciente e revisão antes da interpretação, sem IDs escolhidos pelo modelo.
+        Perguntas e condições pedem esclarecimento; recusas e ambiguidades revogam a autoridade anterior.
+        "Sim, mas prefiro exame" altera a proposta pelas tools existentes e não confirma;
+        falha, resposta inválida ou cancelamento na interpretação também revogam a autoridade;
+        preparar e confirmar no mesmo turno é proibido, inclusive com chamadas adicionais ao modelo;
         alterações exigem novo resumo e confirmação. Repetir a confirmação é idempotente.
-        Confirmações durante outra mensagem em execução retornam INVALID_INPUT (400);
-        aguarde a resposta e leia o resumo antes de confirmar novamente.
+        Toda mensagem durante outra em execução retorna INVALID_INPUT (400), antes da interpretação;
+        aguarde a resposta, leia o resumo e reenvie a mensagem.
+        Expiração revoga a referência e retorna ACTION_EXPIRED (410), exigindo nova preparação.
+        Reenvios usam a referência concluída e retornam o mesmo agendamento, mesmo após a validade original.
+        Revogar autoridade nunca cancela agendamento concluído. Se a gravação final falhar após confirmar,
+        consulte a listagem para verificar o resultado.
         Limite de quatro chamadas ao modelo. Requer OPENAI_API_KEY no servidor.
       requestBody:
         required: true

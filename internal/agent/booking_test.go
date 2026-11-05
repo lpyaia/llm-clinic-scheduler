@@ -128,8 +128,8 @@ func TestBookingRequiresLaterConfirmationAndReplaysTheSameAppointment(t *testing
 			return toolReply("search", "find_available_slots", `{"doctor":"Ana"}`), nil
 		}
 
-		if step != 2 {
-			t.Fatal("confirmation must not be delegated to the model")
+		if step > 2 {
+			return toolReply("decision", "respond_to_proposal", `{"decision":"confirm"}`), nil
 		}
 
 		if !strings.Contains(in.Messages[0].Content, repo.slots[0].ID.String()) {
@@ -217,7 +217,7 @@ func TestBookingRefusalAndAmbiguityCannotExecuteThePreviousProposal(t *testing.T
 	for _, message := range []string{"não", "Não quero", "talvez", "sim, mas prefiro outro horário", "confirmo?"} {
 		t.Run(message, func(t *testing.T) {
 			a, core, _, p, proposal, next := preparedBooking(t)
-			*next = toolReply("clarify", "create_appointment", `{}`)
+			*next = toolReply("clarify", "respond_to_proposal", `{"decision":"clarify"}`)
 
 			out, err := a.ReplyConversation(context.Background(), p, proposal.ConversationID, message)
 			if err != nil || out.PendingAction != nil {
@@ -226,8 +226,10 @@ func TestBookingRefusalAndAmbiguityCannotExecuteThePreviousProposal(t *testing.T
 
 			assertBookings(t, core, p, 0)
 
+			*next = toolReply("no-proposal", "create_appointment", `{}`)
+
 			out, err = a.ReplyConversation(context.Background(), p, proposal.ConversationID, "sim")
-			if err != nil || len(out.Appointments) != 0 || !strings.Contains(out.Message, "Não há proposta") {
+			if err != nil || len(out.Appointments) != 0 || out.PendingAction != nil {
 				t.Fatalf("old proposal was still confirmable: %+v err=%v", out, err)
 			}
 		})
@@ -243,8 +245,10 @@ func TestBookingChangeRevokesConfirmationEvenWhenTheModelFails(t *testing.T) {
 		t.Fatalf("model must not have a confirmation tool: %v", err)
 	}
 
+	*next = toolReply("no-proposal", "create_appointment", `{}`)
+
 	out, err := a.ReplyConversation(context.Background(), p, proposal.ConversationID, "sim")
-	if err != nil || len(out.Appointments) != 0 || !strings.Contains(out.Message, "Não há proposta") {
+	if err != nil || len(out.Appointments) != 0 || out.PendingAction != nil {
 		t.Fatalf("failed change left stale confirmation authority: %+v err=%v", out, err)
 	}
 
@@ -255,13 +259,15 @@ func TestBookingCategoryChangePresentsANewProposalBeforeConfirming(t *testing.T)
 	a, core, repo, p, proposal, next := preparedBooking(t)
 	*next = toolReply("change-category", "create_appointment", `{"category":"exam"}`)
 
-	changed, err := a.ReplyConversation(context.Background(), p, proposal.ConversationID, "Prefiro exame")
+	changed, err := a.ReplyConversation(context.Background(), p, proposal.ConversationID, "Sim, mas prefiro exame")
 	if err != nil || changed.PendingAction == nil || changed.PendingAction.ID == proposal.PendingAction.ID ||
 		changed.PendingAction.Category != "exam" || !strings.Contains(changed.Message, "exame") {
 		t.Fatalf("category change needs a fresh summary: %+v err=%v", changed, err)
 	}
 
 	assertBookings(t, core, p, 0)
+
+	*next = toolReply("decision", "respond_to_proposal", `{"decision":"confirm"}`)
 
 	out, err := a.ReplyConversation(context.Background(), p, proposal.ConversationID, "confirmo")
 	if err != nil || len(out.Appointments) != 1 || out.Appointments[0].Category != "exam" {
@@ -330,8 +336,10 @@ func TestBookingFailedSearchRollsBackChoicesAndPreferencesButRevokesProposal(t *
 		t.Fatalf("expected availability failure, got %v", err)
 	}
 
+	*next = toolReply("no-proposal", "create_appointment", `{}`)
+
 	out, err := a.ReplyConversation(ctx, p, proposal.ConversationID, "sim")
-	if err != nil || len(out.Appointments) != 0 || !strings.Contains(out.Message, "Não há proposta") {
+	if err != nil || len(out.Appointments) != 0 || out.PendingAction != nil {
 		t.Fatalf("failed search retained confirmation authority: %+v err=%v", out, err)
 	}
 
@@ -355,8 +363,10 @@ func TestBookingFailedSearchRollsBackChoicesAndPreferencesButRevokesProposal(t *
 }
 
 func TestBookingCompletedActionReplaysAfterExpiryAndRefusalPreservesTheAppointment(t *testing.T) {
-	a, core, _, p, proposal, _ := preparedBooking(t)
+	a, core, _, p, proposal, next := preparedBooking(t)
 	ctx := context.Background()
+
+	*next = toolReply("decision", "respond_to_proposal", `{"decision":"confirm"}`)
 
 	confirmed, err := a.ReplyConversation(ctx, p, proposal.ConversationID, "sim")
 	if err != nil || len(confirmed.Appointments) != 1 || confirmed.PendingAction != nil {
@@ -371,13 +381,17 @@ func TestBookingCompletedActionReplaysAfterExpiryAndRefusalPreservesTheAppointme
 		t.Fatalf("completed action must replay after proposal expiry: %+v err=%v", replayed, err)
 	}
 
+	*next = toolReply("refusal", "respond_to_proposal", `{"decision":"reject"}`)
+
 	_, err = a.ReplyConversation(ctx, p, proposal.ConversationID, "não")
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	*next = toolReply("no-proposal", "create_appointment", `{}`)
+
 	out, err := a.ReplyConversation(ctx, p, proposal.ConversationID, "sim")
-	if err != nil || len(out.Appointments) != 0 || !strings.Contains(out.Message, "Não há proposta") {
+	if err != nil || len(out.Appointments) != 0 || out.PendingAction != nil {
 		t.Fatalf("refusal retained completed action reference: %+v err=%v", out, err)
 	}
 
@@ -388,17 +402,22 @@ func TestBookingCompletedActionReplaysAfterExpiryAndRefusalPreservesTheAppointme
 }
 
 func TestBookingExpiredProposalCannotReserveASlot(t *testing.T) {
-	a, core, _, p, proposal, _ := preparedBooking(t)
+	a, core, _, p, proposal, next := preparedBooking(t)
 	core.Clock = searchClock{proposal.PendingAction.ExpiresAt}
 
-	for range 2 {
-		_, err := a.ReplyConversation(context.Background(), p, proposal.ConversationID, "sim")
-		if domain.ErrorCode(err) != "ACTION_EXPIRED" {
-			t.Fatalf("expired confirmation must use the existing action lifecycle: %v", err)
-		}
-
-		assertBookings(t, core, p, 0)
+	_, err := a.ReplyConversation(context.Background(), p, proposal.ConversationID, "sim")
+	if domain.ErrorCode(err) != "ACTION_EXPIRED" {
+		t.Fatalf("expired proposal must be rejected before interpretation: %v", err)
 	}
+
+	*next = toolReply("stale", "respond_to_proposal", `{"decision":"confirm"}`)
+
+	_, err = a.ReplyConversation(context.Background(), p, proposal.ConversationID, "sim")
+	if domain.ErrorCode(err) != "MODEL_INVALID_RESPONSE" {
+		t.Fatalf("expired proposal retained authority: %v", err)
+	}
+
+	assertBookings(t, core, p, 0)
 }
 
 func TestBookingConversationAndPatientIsolation(t *testing.T) {
@@ -412,8 +431,10 @@ func TestBookingConversationAndPatientIsolation(t *testing.T) {
 	}
 
 	for _, patient := range []domain.Principal{p, other} {
+		*next = toolReply("no-proposal", "create_appointment", `{}`)
+
 		out, err := a.ReplyConversation(ctx, patient, uuid.Nil, "confirmo")
-		if err != nil || len(out.Appointments) != 0 || !strings.Contains(out.Message, "Não há proposta") {
+		if err != nil || len(out.Appointments) != 0 || out.PendingAction != nil {
 			t.Fatalf("confirmation crossed conversations: %+v err=%v", out, err)
 		}
 
@@ -429,6 +450,8 @@ func TestBookingConversationAndPatientIsolation(t *testing.T) {
 	}
 
 	// A foreign attempt must not consume the owner's proposal.
+	*next = toolReply("decision", "respond_to_proposal", `{"decision":"confirm"}`)
+
 	out, err := a.ReplyConversation(ctx, p, proposal.ConversationID, "sim")
 	if err != nil || len(out.Appointments) != 1 {
 		t.Fatalf("owner lost proposal: %+v err=%v", out, err)
@@ -466,6 +489,8 @@ func TestBookingSlotChangeRequiresANewSummary(t *testing.T) {
 
 		assertBookings(t, core, p, 0)
 	}
+
+	next = toolReply("decision", "respond_to_proposal", `{"decision":"confirm"}`)
 
 	out, err := a.ReplyConversation(ctx, p, first.ConversationID, "sim")
 	if err != nil || len(out.Appointments) != 1 {
@@ -544,7 +569,7 @@ func TestBookingChangeRevokesConfirmationEvenWhenTheRequestIsCancelled(t *testin
 	defer cancel()
 
 	cancelDuringReply := false
-	a, core, _, p, proposal, _ := preparedBooking(t, func() {
+	a, core, _, p, proposal, next := preparedBooking(t, func() {
 		if cancelDuringReply {
 			cancel()
 		}
@@ -556,8 +581,10 @@ func TestBookingChangeRevokesConfirmationEvenWhenTheRequestIsCancelled(t *testin
 		t.Fatalf("expected cancellation, got %v", err)
 	}
 
+	*next = toolReply("no-proposal", "create_appointment", `{}`)
+
 	out, err := a.ReplyConversation(context.Background(), p, proposal.ConversationID, "sim")
-	if err != nil || len(out.Appointments) != 0 || !strings.Contains(out.Message, "Não há proposta") {
+	if err != nil || len(out.Appointments) != 0 || out.PendingAction != nil {
 		t.Fatalf("cancelled change restored old confirmation authority: %+v err=%v", out, err)
 	}
 
@@ -610,7 +637,7 @@ func TestBookingConfirmationCannotQueueBehindAnUnseenProposal(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	_, earlyErr := a.ReplyConversation(ctx, p, proposal.ConversationID, "sim")
+	_, earlyErr := a.ReplyConversation(ctx, p, proposal.ConversationID, "Aham, pode marcar")
 
 	close(release)
 
@@ -624,6 +651,9 @@ func TestBookingConfirmationCannotQueueBehindAnUnseenProposal(t *testing.T) {
 	}
 
 	assertBookings(t, core, p, 0)
+
+	hold = false
+	*next = toolReply("decision", "respond_to_proposal", `{"decision":"confirm"}`)
 
 	out, err := a.ReplyConversation(context.Background(), p, proposal.ConversationID, "sim")
 	if err != nil || len(out.Appointments) != 1 || out.Appointments[0].Category != "exam" {

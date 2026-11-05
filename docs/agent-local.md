@@ -86,7 +86,7 @@ núcleo; a aplicação exige confirmação explícita em uma mensagem posterior.
    `from`/`to` RFC 3339. Preferências de data são armazenadas como instantes, sem
    reinterpretar “semana que vem” a cada mensagem.
 
-   O módulo de preferências em `internal/agent/preferences.go` concentra atualização,
+   O módulo de preferências em `internal/agent/tools/preferences.go` concentra atualização,
    limpeza, esclarecimento e resolução de datas. A busca recebe os critérios resolvidos
    e mantém a resolução de nomes no catálogo. O contexto JSON enviado ao modelo preserva
    o formato existente; o fluxo grava preferências e histórico
@@ -112,31 +112,43 @@ Não reserva o horário. A resposta inclui `pending_action` com `id`, `summary`,
 `category` e `expires_at`, além de uma mensagem com categoria, resumo, validade
 no fuso da clínica e pedido explícito de confirmação. A ação vale dez minutos.
 
-Após ler o resumo, envie “sim, confirmo” na mesma conversa. A aplicação aceita
-mensagens completas: “sim”, “confirmo”, “sim, confirmo”, “sim confirmo”,
-“pode agendar” e “sim, pode agendar”, ignorando caixa, espaços repetidos e
-pontos ou exclamações finais. Perguntas e frases com condições não confirmam.
-Essa verificação usa diretamente a mensagem do paciente, sem chamar o modelo.
-Não existe ferramenta de confirmação nem argumento para escolher ID de ação.
-Confirmar junto com a escolha inicial apenas recebe o resumo; exige outra mensagem.
-Uma confirmação enviada enquanto outra mensagem está em execução é rejeitada com
-`INVALID_INPUT` (400). Aguarde a resposta, leia o resumo e confirme novamente;
-a confirmação não espera na fila para executar uma proposta ainda não apresentada.
+Após ler o resumo, responda na mesma conversa: por exemplo, “Aham, pode marcar”,
+“confirmado” ou “aceito”. O modelo interpreta a mensagem atual no contexto da proposta,
+sem listas fixas de expressões. `respond_to_proposal` recebe somente `decision`:
+`confirm`, `reject` ou `clarify`. Não aceita ID de ação, paciente ou revisão.
+Perguntas, condições e ambiguidades devem gerar `clarify`; recusas, inclusive
+indiretas como “Melhor deixar para depois”, usam `reject`.
 
-Qualquer outra mensagem processada invalida a confirmação da proposta anterior,
-inclusive se o modelo falhar ou a requisição for cancelada durante a execução.
-“Não” descarta a proposta; uma resposta ambígua pede esclarecimento. Para retomar,
+Alterações usam as tools existentes: “Sim, mas prefiro exame” chama
+`create_appointment` com a nova categoria, apresenta outro resumo e exige mensagem
+posterior. Uma nova busca usa `find_available_slots`. Preparar encerra o turno:
+nenhuma continuação ou segunda chamada ao modelo pode confirmar uma proposta
+criada nesse mesmo turno. A decisão e comparação das alternativas estão em
+[Respostas contextuais a propostas](adr/0001-contextual-proposal-responses.md).
+
+A aplicação vincula ação, paciente e revisão antes de chamar o modelo. Somente
+uma proposta já apresentada ou referência à ação concluída habilita a tool de
+resposta. O núcleo revalida ownership, validade, disponibilidade e limite semanal
+na confirmação. Sem proposta, o modelo deve pedir uma escolha; “não” não descarta
+uma proposta inexistente. Conversas alheias retornam `NOT_FOUND` (404).
+
+Toda mensagem concorrente agora retorna `INVALID_INPUT` (400) imediatamente,
+antes da interpretação. Aguarde a resposta, leia o resumo e reenvie a mensagem.
+Antes, apenas confirmações reconhecidas pela lista tinham essa proteção; demais
+mensagens esperavam. Conversas diferentes continuam independentes.
+
+A autoridade anterior é revogada e gravada antes da interpretação. Rejeição,
+alteração, ambiguidade, desvio de intenção, falha do modelo, resposta inválida ou
+cancelamento não permitem confirmar depois a proposta anterior. Para retomar,
 escolha ou altere horário/categoria e leia o novo resumo antes de confirmar.
-Trocar apenas a categoria preserva o horário escolhido; uma nova busca limpa
-as escolhas e os horários apresentados anteriormente. Nos argumentos da ferramenta,
-`null` preserva a escolha e string vazia limpa um horário ou categoria ambíguos.
+Trocar apenas categoria preserva o horário escolhido; nova busca limpa escolhas
+e horários apresentados. `null` preserva escolhas; string vazia limpa um campo ambíguo.
 
-Sem proposta, a aplicação pede uma escolha. Propostas expiradas retornam
-`ACTION_EXPIRED` (410), sem reserva. A confirmação revalida disponibilidade e
-limite semanal. Repeti-la retorna o mesmo agendamento pela idempotência do núcleo,
-inclusive após a validade de uma ação já concluída. O resultado aparece em
-`appointments`. IDs de conversas alheias retornam `NOT_FOUND`; outras conversas,
-mesmo do próprio paciente, não podem confirmar essa proposta.
+Proposta expirada retorna `ACTION_EXPIRED` (410) antes da interpretação e perde
+a autoridade; é necessária nova preparação. Se expirar durante a chamada ao
+modelo, o núcleo também impede a reserva. Reenvios bem-sucedidos usam a referência
+à ação concluída e retornam o mesmo agendamento em `appointments`, inclusive após
+a validade original. Revogar essa referência nunca cancela o agendamento.
 
 ## Execução e proteção dos resultados
 
@@ -154,7 +166,7 @@ ficam no package `tools`; nenhuma delas conhece `Agent`, `conversationFlow` ou o
 armazenamento da conversa. As instâncias recebem apenas o núcleo e os schemas.
 Cada execução recebe `tools.Input`: identidade autenticada pela aplicação,
 preferências por valor, seleção por valor e uma cópia dos horários apresentados.
-Argumentos do modelo nunca escolhem a identidade. A execução produz um de dois resultados:
+Argumentos do modelo nunca escolhem a identidade. A execução produz um de três resultados:
 
 - `tools.ReturnToModel` (retornar ao modelo): dados, schema nomeado, instruções de resposta
   e um finalizador que verifica a resposta posterior. `list_appointments`, em
@@ -163,6 +175,8 @@ Argumentos do modelo nunca escolhem a identidade. A execução produz um de dois
   `find_available_slots`, em `search.go`, usa esse resultado para disponibilidade e
   esclarecimentos. `create_appointment`, em `booking.go`, apresenta a proposta ou
   esclarecimento sem outra chamada ao modelo. A conversa pode continuar em uma nova mensagem.
+- `tools.ProposalResponse`: interpretação de confirmação, rejeição ou esclarecimento,
+  sem executar mutação. O fluxo verifica o vínculo e somente então chama o núcleo.
 
 O fluxo aplica os valores retornados em `Search` e `Booking`, incluindo escolhas
 incompletas e preferências preservadas durante esclarecimentos. A busca refina uma
@@ -198,7 +212,7 @@ de horários, que encerra a mensagem com sua própria resposta.
 
 ```text
 agent (entrada autenticada, fluxo, armazenamento e loop)
-  -> tools (consulta, busca, preparação e apresentação)
+  -> tools (consulta, busca, preparação, interpretação de proposta e apresentação)
   -> contract (mensagens, dados apresentados e validação JSON)
 tools -> contract, application, domain
 contract -> domain (erro de resposta inválida)
@@ -219,55 +233,40 @@ Os schemas de produção continuam em `internal/agent/schemas/*.json`, embutidos
 exclusivamente por `internal/agent/schemas.go` e fornecidos às ferramentas na composição.
 Tipos específicos do fornecedor continuam no adapter.
 
-O módulo de fluxo (`internal/agent/flow.go` e os métodos em `booking.go`) é dono
-de `Conversation` e de suas transições. `Agent.ReplyConversation` valida a entrada
-autenticada e coordena o turno em ordem: adquire acesso exclusivo, aplica e grava
-a revogação decidida pelo fluxo, obtém a resposta, grava o estado final e libera
-o acesso. O fluxo responde diretamente a confirmações e recusas; para as demais
-mensagens, `Agent.replyWithModel` executa o loop do modelo e chama as operações do
-fluxo. O fluxo não recebe callbacks nem chama `Agent`. Essa sequência mantém o
-acesso exclusivo durante todo o processamento, inclusive chamadas ao modelo e ao
-núcleo. O fluxo interpreta as mesmas frases completas de
-confirmação e recusa descritas acima; não delega essa interpretação ao modelo.
-A busca retorna disponibilidade ou esclarecimento sem acessar estado de booking.
-Ao iniciar uma busca, o fluxo limpa horários apresentados, seleção e proposta,
-inclusive quando a busca termina em esclarecimento.
+O módulo de fluxo (`internal/agent/flow.go` e `booking.go`) é dono de `Conversation`
+e de suas transições. `Agent.ReplyConversation` coordena o turno em ordem: adquire
+acesso exclusivo imediato, captura o vínculo anterior, grava a revogação, valida
+a referência no núcleo, executa o loop, grava a resposta e libera acesso por `defer`.
+O acesso permanece exclusivo durante chamadas ao modelo e núcleo. O fluxo não
+recebe callbacks nem reentra no agente. Uma decisão estruturada retorna ao fluxo,
+que valida identidade e revisão antes de executar a confirmação determinística.
 
-O estado distingue horários apresentados (`Offered`), escolha ainda incompleta
-(`Selection`), proposta apresentada aguardando resposta (`Proposal`) e referência
-à ação concluída para reenvios (`Completed`). Confirmar com sucesso remove a
-proposta e guarda somente o ID da ação concluída. Reenvios consultam a idempotência
-do núcleo, inclusive após a validade original. Revogar essa referência não cancela
-um agendamento já realizado. Uma confirmação expirada continua retornando
-`ACTION_EXPIRED` em novas tentativas; ownership, validade e disponibilidade são
-sempre revalidados pelo núcleo.
+O estado distingue horários apresentados (`Offered`), seleção incompleta
+(`Selection`), proposta aguardando resposta (`Proposal`), referência concluída
+(`Completed`) e revisão (`Revision`). A revisão avança ao consumir uma referência
+e ao apresentar nova proposta. O vínculo é local ao turno; após desvio para outra
+tool, `respond_to_proposal` também é removida das próximas chamadas ao modelo.
+Uma preparação retorna imediatamente outro resumo, sem autoridade para confirmá-lo
+no mesmo turno. O armazenamento apenas valida ownership, exclusão e gravação.
 
-`agent.ConversationStore.Acquire` valida ownership e entrega acesso exclusivo
-(`LockedConversation`). `CreateConversation` autoriza criar um ID novo; um
-follow-up não pode criar IDs desconhecidos. O fluxo escolhe acesso imediato para
-confirmações (`Wait: false`) e converte ocupação em `INVALID_INPUT`, impedindo que
-uma confirmação espere por uma proposta ainda não apresentada. Demais mensagens
-esperam com cancelamento. Conversas distintas podem avançar em paralelo.
-O armazenamento não reconhece confirmação, recusa, proposta ou operação de booking.
+`ConversationStore.Acquire` entrega `LockedConversation`. O agente sempre usa
+`Wait: false`; ocupação vira `INVALID_INPUT`. `CreateConversation` permite um ID
+novo; follow-ups desconhecidos não criam conversas. `Snapshot` e `Save` copiam o
+estado. Cada gravação é durável durante o processo; `Save` rejeita contextos
+cancelados. Uma conversa nova sem gravação é removida ao liberar o acesso.
 
-`Snapshot` entrega uma cópia independente. O fluxo decide sobre a revogação e
-modifica sua cópia do estado; `Agent.ReplyConversation` usa `Save` explicitamente
-em dois momentos: antes de processar uma mensagem que não confirma, para gravar
-a revogação de proposta ou referência concluída existente; e após uma resposta
-bem-sucedida, para gravar as demais transições, preferências e histórico. Cada gravação é uma
-cópia independente e permanece em memória mesmo se a execução posterior falhar.
-Uma falha do modelo, ferramenta ou cancelamento preserva a revogação já gravada,
-mas descarta alterações posteriores de escolhas, preferências e histórico.
-Se a nova busca falhar, as escolhas anteriores permanecem, exigindo preparar e
-apresentar outra proposta antes de confirmar. Sem gravação bem-sucedida, uma
-conversa nova é removida ao liberar o acesso. `Agent.ReplyConversation` libera o
-acesso por `defer`, inclusive em falhas; `Save` recusa um contexto já cancelado.
+Revogação anterior à interpretação permanece mesmo após falha ou cancelamento;
+as demais alterações, preferências e histórico só são salvos após resposta válida.
+Uma busca malsucedida preserva escolhas anteriores, mas exige nova preparação.
+Antes, confirmações reconhecidas preservavam autoridade após falha; agora a
+interpretação malsucedida também a consome. Confirmações expiradas deixam de
+repetir `ACTION_EXPIRED`: a primeira tentativa revoga a referência, e as próximas
+exigem nova preparação. Validade e ownership continuam protegidos pelo núcleo.
 
-Se o núcleo concluir uma confirmação e a gravação final da conversa falhar ou for
-cancelada, o ID anterior continua disponível no estado já gravado. Uma confirmação
-posterior repete esse ID pelo núcleo e recupera o mesmo agendamento, sem duplicar.
-Preparar uma ação sem conseguir gravar a resposta não concede autoridade para
-confirmá-la: somente a proposta apresentada e gravada na conversa pode ser usada.
+Se o núcleo confirmar e a gravação final falhar ou for cancelada, o agendamento
+permanece, mas a referência conversacional já foi revogada. Consulte a listagem
+para verificar o resultado; a recuperação ampliada fica em #14. Preparar sem
+conseguir gravar a resposta nunca concede autoridade para confirmar a ação.
 
 O histórico conserva as últimas dez interações completas; preferências estruturadas
 permanecem. Reiniciar o processo perde as conversas, e IDs antigos retornam
@@ -282,7 +281,7 @@ envia `store: false`. A mensagem do paciente e os dados da consulta são enviado
 ao fornecedor configurado; use dados fictícios no roteiro local. Logs HTTP não
 registram esse conteúdo nem a chave. Uma busca de horários ou preparação usa uma chamada de API;
 consultar agendamentos normalmente usa duas. Essas chamadas estão sujeitas à cobrança da
-conta do fornecedor. Confirmações reconhecidas não chamam o fornecedor.
+conta do fornecedor. Interpretar uma resposta à proposta usa uma chamada ao fornecedor.
 
 Erros mantêm o envelope HTTP existente: `INVALID_INPUT` (400), `UNAUTHORIZED`
 (401), `MODEL_INVALID_RESPONSE` ou `AGENT_STEP_LIMIT` (502), `AGENT_UNAVAILABLE`
