@@ -1,6 +1,11 @@
 package agent
 
-import _ "embed"
+import (
+	_ "embed"
+	"encoding/json"
+
+	"github.com/lpyaia/llm-clinic-scheduler/internal/agent/tools"
+)
 
 //go:embed schemas/list_appointments.json
 var listSchema string
@@ -13,3 +18,10 @@ var findAvailableSlotsSchema string
 
 //go:embed schemas/create_appointment.json
 var createAppointmentSchema string
+
+var toolSchemas = tools.Schemas{
+	ListAppointments:   json.RawMessage(listSchema),
+	AppointmentAnswer:  json.RawMessage(appointmentAnswerSchema),
+	FindAvailableSlots: json.RawMessage(findAvailableSlotsSchema),
+	CreateAppointment:  json.RawMessage(createAppointmentSchema),
+}

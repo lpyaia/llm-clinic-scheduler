@@ -3,7 +3,9 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
+
+	"github.com/lpyaia/llm-clinic-scheduler/internal/agent/contract"
+	"github.com/lpyaia/llm-clinic-scheduler/internal/agent/tools"
 )
 
 // Model is the provider boundary. Implementations must honor context cancellation.
@@ -11,40 +13,17 @@ type Model interface {
 	Complete(context.Context, Request) (Response, error)
 }
 
-type Request struct {
-	Messages []Message
-	Tools    []Tool
-	// RequireTool requests a tool call instead of a final answer.
-	RequireTool    bool
-	ResponseSchema *ResponseSchema
-}
-
-// ResponseSchema describes the structured answer expected by the active tool.
-// A nil schema leaves the model request without a structured final-answer format.
-type ResponseSchema struct {
-	Name   string
-	Schema json.RawMessage
-}
-
-type Message struct {
-	Role       string
-	Content    string
-	ToolCalls  []ToolCall
-	ToolCallID string
-}
-
-type Tool struct {
-	Name, Description string
-	Parameters        json.RawMessage
-}
-
-type ToolCall struct {
-	ID, Name  string
-	Arguments json.RawMessage
-}
-
-// Response contains either tool calls or a structured final answer, never both.
-type Response struct {
-	Content   json.RawMessage
-	ToolCalls []ToolCall
-}
+// Aliases preserve the public agent API while contracts are owned below the loop.
+type Request = contract.Request
+type ResponseSchema = contract.ResponseSchema
+type Message = contract.Message
+type Tool = contract.Tool
+type ToolCall = contract.ToolCall
+type Response = contract.Response
+type Result = contract.Result
+type Appointment = contract.Appointment
+type Slot = contract.Slot
+type Availability = contract.Availability
+type PendingAction = contract.PendingAction
+type BookingSelection = contract.BookingSelection
+type SearchPreferences = tools.SearchPreferences

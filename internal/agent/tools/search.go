@@ -1,4 +1,4 @@
-package agent
+package tools
 
 import (
 	"context"
@@ -6,54 +6,39 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 	"unicode"
 
 	"github.com/google/uuid"
+	"github.com/lpyaia/llm-clinic-scheduler/internal/agent/contract"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/application"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/domain"
 	"golang.org/x/text/unicode/norm"
 )
 
-type Slot struct {
-	ID         uuid.UUID `json:"id"`
-	DoctorName string    `json:"doctor_name"`
-	StartsAt   time.Time `json:"starts_at"`
-}
-
-type Availability struct {
-	Slots    []Slot    `json:"slots"`
-	From     time.Time `json:"searched_from"`
-	Until    time.Time `json:"searched_until"`
-	Expanded bool      `json:"expanded"`
-}
-
 type slotSearch struct {
-	core        *application.Service
-	preferences *SearchPreferences
+	core   *application.Service
+	schema Schemas
 }
 
-func (*slotSearch) definition() Tool {
-	return Tool{
+func (s *slotSearch) Definition() contract.Tool {
+	return contract.Tool{
 		Name: "find_available_slots",
 		Description: "Busca horários reais por nome de médico/especialidade e atualiza preferências. " +
 			"null ou campo ausente preserva; string vazia limpa. Não aceita IDs.",
-		Parameters: json.RawMessage(findAvailableSlotsSchema),
+		Parameters: s.schema.FindAvailableSlots,
 	}
 }
 
-func clarification(message string) replyToPatient {
-	return replyToPatient{result: Result{Message: message, Appointments: []Appointment{}}}
-}
+func (s *slotSearch) Execute(ctx context.Context, input Input, raw json.RawMessage) (Outcome, error) {
+	preferences := input.Search
 
-func (s *slotSearch) execute(ctx context.Context, raw json.RawMessage) (toolOutcome, error) {
-	next, question, err := s.preferences.refine(raw, s.core.Clock, s.core.Location)
+	next, question, err := preferences.refine(raw, s.core.Clock, s.core.Location)
 	if err != nil {
 		return nil, err
 	}
 
 	if question != "" {
-		return clarification(question), nil
+		return searchClarification(preferences, question), nil
 	}
 
 	doctors, err := s.core.ListDoctors(ctx, uuid.Nil)
@@ -77,18 +62,18 @@ func (s *slotSearch) execute(ctx context.Context, raw json.RawMessage) (toolOutc
 
 	doctorID, question := resolveName(next.Doctor, "médico", doctorNames)
 	if question != "" {
-		return clarification(question), nil
+		return searchClarification(preferences, question), nil
 	}
 
 	specialtyID, question := resolveName(next.Specialty, "especialidade", specialtyNames)
 	if question != "" {
-		return clarification(question), nil
+		return searchClarification(preferences, question), nil
 	}
 
 	if doctorID != uuid.Nil && specialtyID != uuid.Nil {
 		for _, doctor := range doctors {
 			if doctor.ID == doctorID && doctor.SpecialtyID != specialtyID {
-				return clarification(
+				return searchClarification(preferences,
 					"O médico escolhido não atende a especialidade informada. Qual preferência deseja alterar?",
 				), nil
 			}
@@ -107,14 +92,14 @@ func (s *slotSearch) execute(ctx context.Context, raw json.RawMessage) (toolOutc
 	)
 	if err != nil {
 		if domain.ErrorCode(err) == "INVALID_INPUT" {
-			return clarification("Informe um intervalo futuro de até oito semanas."), nil
+			return searchClarification(preferences, "Informe um intervalo futuro de até oito semanas."), nil
 		}
 
 		return nil, err
 	}
 
-	availability := &Availability{
-		Slots:    make([]Slot, 0, len(found.Slots)),
+	availability := &contract.Availability{
+		Slots:    make([]contract.Slot, 0, len(found.Slots)),
 		From:     found.From,
 		Until:    found.Until,
 		Expanded: found.Expanded,
@@ -139,13 +124,13 @@ func (s *slotSearch) execute(ctx context.Context, raw json.RawMessage) (toolOutc
 	}
 
 	for _, row := range found.Slots {
-		slot := Slot{ID: row.ID, DoctorName: row.DoctorName, StartsAt: row.StartsAt.In(s.core.Location)}
+		slot := contract.Slot{ID: row.ID, DoctorName: row.DoctorName, StartsAt: row.StartsAt.In(s.core.Location)}
 		availability.Slots = append(availability.Slots, slot)
 		fmt.Fprintf(&message, "\n- %s com %s.", slot.StartsAt.Format("02/01/2006 às 15:04 -07:00"), slot.DoctorName)
 	}
 
-	return replyToPatient{result: Result{
-		Message: message.String(), Appointments: []Appointment{}, Availability: availability,
+	return ReplyToPatient{Search: &preferences, Result: contract.Result{
+		Message: message.String(), Appointments: []contract.Appointment{}, Availability: availability,
 	}}, nil
 }
 
