@@ -306,7 +306,10 @@ func TestBookingNewSearchDiscardsThePreviousSelection(t *testing.T) {
 
 func TestBookingDateClarificationDiscardsThePreviousSelection(t *testing.T) {
 	a, core, repo, p, proposal, next := preparedBooking(t)
-	*next = toolReply("search", "find_available_slots", `{"date":"clarify"}`)
+	*next = toolReply("search", "find_available_slots", `{
+		"date":"clarify",
+		"clarification_question":"Qual data você prefere?"
+	}`)
 
 	out, err := a.ReplyConversation(context.Background(), p, proposal.ConversationID, "Em outra data")
 	if err != nil || !strings.Contains(out.Message, "Qual data") {

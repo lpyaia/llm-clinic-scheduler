@@ -78,6 +78,7 @@ func (f *conversationFlow) request(message string) (Request, error) {
 	system := instructions
 	if f.core.Clock != nil && f.core.Location != nil {
 		system += "\nAgora na clínica: " + f.core.Clock.Now().In(f.core.Location).Format(time.RFC3339)
+		system += "\nFuso da clínica: " + f.core.Location.String()
 	}
 
 	preferences, err := json.Marshal(f.state.Search)

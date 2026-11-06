@@ -41,8 +41,21 @@ func (p *SearchPreferences) refine(
 ) (searchCriteria, string, error) {
 	var args struct {
 		Doctor, Specialty, Period, Date, From, To *string
+		ClarificationQuestion                     *string `json:"clarification_question"`
 	}
-	if err := contract.DecodeObject(raw, &args, "doctor", "specialty", "period", "date", "from", "to"); err != nil {
+	if err := contract.DecodeObject(
+		raw, &args, "doctor", "specialty", "period", "date", "from", "to", "clarification_question",
+	); err != nil {
+		return searchCriteria{}, "", contract.InvalidResponse()
+	}
+
+	clarifying := args.Date != nil && *args.Date == "clarify"
+	question := ""
+	if args.ClarificationQuestion != nil {
+		question = strings.TrimSpace(*args.ClarificationQuestion)
+	}
+
+	if (clarifying && question == "") || (!clarifying && args.ClarificationQuestion != nil) {
 		return searchCriteria{}, "", contract.InvalidResponse()
 	}
 
@@ -64,10 +77,7 @@ func (p *SearchPreferences) refine(
 		return searchCriteria{}, "", contract.InvalidResponse()
 	}
 
-	question := ""
-	if args.Date != nil && *args.Date == "clarify" {
-		question = "Qual data ou intervalo você prefere? Informe também o período, se desejar."
-	} else {
+	if !clarifying {
 		if err := next.resolveDates(args.Date, args.From, args.To, clock, location); err != nil {
 			return searchCriteria{}, "", err
 		}
