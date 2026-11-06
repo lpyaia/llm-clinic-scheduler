@@ -15,6 +15,7 @@
       ]
     },
     "period": {
+      "description": "Período amplo. Horas exatas: use from/to e period=\"\" para limpar o período anterior.",
       "type": [
         "string",
         "null"
@@ -28,6 +29,7 @@
       ]
     },
     "date": {
+      "description": "Atalho de data; para um dia específico ou horas exatas, use null e preencha from/to.",
       "type": [
         "string",
         "null"
@@ -55,14 +57,21 @@
         "string",
         "null"
       ],
-      "description": "Início inclusivo RFC3339. String vazia limpa."
+      "description": "Início inclusivo RFC3339 no fuso da clínica, com a hora exata se informada. String vazia limpa."
     },
     "to": {
       "type": [
         "string",
         "null"
       ],
-      "description": "Fim exclusivo RFC3339. String vazia limpa."
+      "description": "Fim exclusivo RFC3339 no fuso da clínica. Um dia inteiro termina à meia-noite seguinte."
+    },
+    "clarification_question": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Pergunta só sobre a dúvida real quando date=clarify; null nos demais casos."
     }
   },
   "required": [
@@ -71,6 +80,7 @@
     "period",
     "date",
     "from",
-    "to"
+    "to",
+    "clarification_question"
   ]
 }

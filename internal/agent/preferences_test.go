@@ -44,11 +44,20 @@ func TestSearchPreferenceUpdatesPreserveModelContext(t *testing.T) {
 		},
 		{
 			name: "date clarification retains dates and updates other preferences",
-			args: `{"doctor":"  Ana Souza  ","period":"morning","date":"clarify","from":"?","to":"?"}`,
+			args: `{
+				"doctor":"  Ana Souza  ","period":"morning","date":"clarify","from":"?","to":"?",
+				"clarification_question":"Qual data você prefere para consultar Ana pela manhã?"
+			}`,
 			wantContext: `{"Doctor":"Ana Souza","Specialty":"Cardiologia","Period":"morning",` +
 				`"From":"2026-11-02T00:00:00-03:00","To":"2026-11-09T00:00:00-03:00",` +
 				`"WindowFrom":"2026-11-02T00:00:00-03:00"}`,
 			question: "Qual data",
+		},
+		{
+			name:        "missing clarification question discards other changes",
+			args:        `{"doctor":"","period":"morning","date":"clarify"}`,
+			wantContext: selectedSearchContext,
+			code:        "MODEL_INVALID_RESPONSE",
 		},
 		{
 			name:        "malformed date discards other changes",

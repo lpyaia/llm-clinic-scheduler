@@ -261,7 +261,10 @@ func TestDateClarificationKeepsDoctorAndPeriod(t *testing.T) {
 	step := 0
 	model := modelFunc(func(context.Context, agent.Request) (agent.Response, error) {
 		step++
-		args := `{"doctor":"Ana","period":"afternoon","date":"clarify"}`
+		args := `{
+			"doctor":"Ana","period":"afternoon","date":"clarify",
+			"clarification_question":"Qual data você prefere para consultar Ana à tarde?"
+		}`
 		if step == 2 {
 			args = `{"date":"next_week"}`
 		}

@@ -74,7 +74,7 @@ núcleo; a aplicação exige confirmação explícita em uma mensagem posterior.
    substituem o valor anterior. Não há reserva nem mutação ao buscar horários.
 
    A ferramenta `find_available_slots` aceita nomes `doctor` e `specialty`,
-   `period`, `date`, `from` e `to`; não aceita IDs de paciente ou de catálogo.
+   `period`, `date`, `from`, `to` e `clarification_question`; não aceita IDs de paciente ou de catálogo.
    O modelo traduz português para esses argumentos. O servidor converte `today`,
    `tomorrow`, `this_week`, `next_week`, `after_monday` até `after_sunday` e
    `earliest` usando o relógio injetado e o fuso da clínica. Semanas são de segunda
@@ -85,6 +85,21 @@ núcleo; a aplicação exige confirmação explícita em uma mensagem posterior.
    de data para buscar a primeira janela com disponibilidade. Datas explícitas usam
    `from`/`to` RFC 3339. Preferências de data são armazenadas como instantes, sem
    reinterpretar “semana que vem” a cada mensagem.
+
+   O modelo recebe a data atual e o fuso da clínica. “Na quarta” seleciona somente
+   aquele dia por `from`/`to`, com fim exclusivo à meia-noite seguinte; “depois de quarta”
+   usa `after_wednesday`. A semana já escolhida determina o dia quando inequívoca;
+   sem essa referência, vale a próxima ocorrência futura. No próprio dia, “na quarta”
+   pode incluir hoje; “próxima quarta” seleciona a ocorrência após hoje.
+   Horas específicas usam `from`/`to` no dia escolhido, `date=null` e `period=""`,
+   removendo um período amplo anterior que poderia contrariar o novo horário.
+
+   `date=clarify` exige `clarification_question` não vazia, perguntando somente pelo
+   ponto ambíguo que o contexto não resolve. Sem esclarecimento, esse campo deve ser
+   `null`. A pergunta é devolvida ao paciente sem consultar disponibilidade e não é
+   armazenada como preferência. Preferências válidas de médico, especialidade e período
+   são mantidas; a pergunta e a resposta ficam no histórico. Enquanto a data é esclarecida,
+   o intervalo anterior continua salvo. Uma chamada inválida não altera as preferências.
 
    O módulo de preferências em `internal/agent/tools/preferences.go` concentra atualização,
    limpeza, esclarecimento e resolução de datas. A busca recebe os critérios resolvidos
@@ -98,6 +113,24 @@ núcleo; a aplicação exige confirmação explícita em uma mensagem posterior.
    `expanded`. A mensagem também informa o intervalo e a ausência de resultados.
    A busca termina na ferramenta e o servidor monta a resposta. Para iniciar outra
    conversa, omita o ID.
+
+## Conferir a interpretação de datas
+
+Os testes com modelo simulado verificam os argumentos e seus efeitos, sem medir interpretação em português.
+Para avaliar o provedor real, confira os argumentos de `find_available_slots` com um relógio controlado.
+Referência para os casos abaixo: `2026-11-06T19:00:00-03:00`, fuso `America/Sao_Paulo`, cardiologia já escolhida.
+Os campos não alterados devem ser `null`; `clarification_question` deve ser `null` nas buscas sem ambiguidade.
+
+| Mensagem | Argumentos temporais esperados |
+| --- | --- |
+| Na quarta-feira | `date=null`, `from=2026-11-11T00:00:00-03:00`, `to=2026-11-12T00:00:00-03:00` |
+| Quarta, 10h–12h | `date=null`, `period=""`, `from=2026-11-11T10:00:00-03:00`, `to=2026-11-11T12:00:00-03:00` |
+| Depois de quarta, semana que vem | Após escolher `next_week`, `after_wednesday` busca de 12/11 até 16/11 (exclusivo) |
+| Quarta, às 10 ou às 22, ainda não decidi | `date=clarify`; pergunta somente qual dos dois horários deseja |
+
+Repita o pedido de 10h–12h após escolher a tarde: `period=""` deve remover esse filtro.
+Com `Agora na clínica=2026-11-07T00:30:00Z` convertido para São Paulo, “hoje” ainda é 06/11.
+Com `Agora na clínica=2026-12-31T19:00:00-03:00`, “próxima quarta” é 06/01/2027.
 
 ## Agendar com confirmação
 
