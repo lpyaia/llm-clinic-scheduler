@@ -46,7 +46,9 @@ func New(core *application.Service, schemas Schemas) []Executor {
 		&appointmentQuery{core: core, schema: schemas},
 		&slotSearch{core: core, schema: schemas},
 		&bookingPreparation{core: core, schema: schemas},
-		&appointmentSelection{core: core, schema: schemas.SelectAppointment},
+		// Both operations identify the same eligible originals; cancellation also prepares its proposal.
+		&appointmentSelection{core: core, schema: schemas.SelectAppointment, operation: domain.RescheduleAppointment},
+		&appointmentSelection{core: core, schema: schemas.SelectAppointment, operation: domain.CancelAppointment},
 		&reschedulingPreparation{core: core, schema: schemas.RescheduleAppointment},
 		&proposalResponse{schema: schemas.RespondToProposal},
 	}

@@ -7,7 +7,7 @@
         "string",
         "null"
       ],
-      "description": "ID de um agendamento próprio identificado no contexto; null lista candidatos, vazio pede escolha."
+      "description": "ID próprio inequívoco no contexto; null usa os filtros conhecidos, vazio exige esclarecimento."
     },
     "doctor": {
       "type": [

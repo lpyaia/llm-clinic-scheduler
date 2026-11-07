@@ -12,11 +12,21 @@ import (
 )
 
 type appointmentSelection struct {
-	core   *application.Service
-	schema json.RawMessage
+	core      *application.Service
+	schema    json.RawMessage
+	operation string
 }
 
 func (s *appointmentSelection) Definition() contract.Tool {
+	if s.operation == domain.CancelAppointment {
+		return contract.Tool{
+			Name: "cancel_appointment",
+			Description: "Identifica um agendamento próprio futuro e prepara seu cancelamento. " +
+				"Pede escolha se ambíguo. Apresenta resumo e exige confirmação em mensagem posterior.",
+			Parameters: s.schema,
+		}
+	}
+
 	return contract.Tool{
 		Name: "select_appointment",
 		Description: "Identifica um agendamento próprio futuro para remarcar. " +
@@ -43,7 +53,7 @@ func (s *appointmentSelection) Execute(ctx context.Context, input Input, raw jso
 		var err error
 
 		id, err = uuid.Parse(*args.AppointmentID)
-		if err != nil {
+		if err != nil || id == uuid.Nil {
 			return nil, contract.InvalidResponse()
 		}
 	}
@@ -91,6 +101,29 @@ func (s *appointmentSelection) Execute(ctx context.Context, input Input, raw jso
 		selected = nil
 	} else {
 		message = RenderAppointments(rows) + "\nPara qual novo horário deseja remarcar com o mesmo médico?"
+	}
+
+	if s.operation == domain.CancelAppointment {
+		if selected == nil {
+			return ReplyToPatient{
+				Result: contract.Result{
+					Message: RenderAppointments(rows) + "\nQual agendamento você deseja cancelar?", Appointments: rows,
+				},
+				Rescheduling: &ReschedulingUpdate{},
+			}, nil
+		}
+
+		action, err := s.core.Prepare(ctx, input.Principal, application.PrepareInput{
+			Operation: domain.CancelAppointment, AppointmentID: selected.ID,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		reply := proposalReply(action, selected.Category, contract.BookingSelection{}, s.core.Location)
+		reply.Rescheduling = &ReschedulingUpdate{}
+
+		return reply, nil
 	}
 
 	preferences := SearchPreferences{}

@@ -159,7 +159,7 @@ func (f *conversationFlow) executeTool(ctx context.Context, call ToolCall) (tool
 	}
 
 	f.state.Intent = call.Name
-	if call.Name == "find_available_slots" || call.Name == "select_appointment" {
+	if call.Name == "find_available_slots" || call.Name == "select_appointment" || call.Name == "cancel_appointment" {
 		f.state.Offered = nil
 		f.state.Selection = BookingSelection{}
 		f.state.Proposal, f.state.Completed = nil, nil
@@ -188,7 +188,7 @@ func (f *conversationFlow) executeTool(ctx context.Context, call ToolCall) (tool
 				"O agendamento original será mantido.\n" + reply.Result.Message
 		}
 
-		if call.Name == "select_appointment" {
+		if call.Name == "select_appointment" || call.Name == "cancel_appointment" {
 			f.state.Candidates = append([]Appointment(nil), reply.Result.Appointments...)
 		}
 

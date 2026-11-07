@@ -68,7 +68,7 @@ func TestInvalidModelResponsesDoNotExecuteTools(t *testing.T) {
 	for _, response := range []agent.Response{
 		{},
 		{Content: json.RawMessage(`{"appointment_ids":[]}`)}, // No successful query yet.
-		{ToolCalls: []agent.ToolCall{{ID: "call", Name: "cancel_appointment", Arguments: json.RawMessage(`{}`)}}},
+		{ToolCalls: []agent.ToolCall{{ID: "call", Name: "unknown_tool", Arguments: json.RawMessage(`{}`)}}},
 		{ToolCalls: []agent.ToolCall{{Name: "list_appointments", Arguments: json.RawMessage(`{}`)}}},
 		{ToolCalls: []agent.ToolCall{valid, valid}},
 		{ToolCalls: []agent.ToolCall{valid}, Content: json.RawMessage(`{"appointment_ids":[]}`)},

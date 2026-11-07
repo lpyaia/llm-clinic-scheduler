@@ -1,4 +1,4 @@
-# Consultas, busca, agendamento e remarcação conversacional — tickets #7, #10, #11 e #12
+# Fluxos conversacionais de agendamento — tickets #7, #10, #11, #12 e #13
 
 O paciente autenticado consulta seus agendamentos em português por
 `POST /v1/agent/messages`. A ferramenta `list_appointments` reutiliza
@@ -377,6 +377,49 @@ O teste `TestConversationalReschedulingPostgres` também prepara e confirma prop
 com o banco real, cobrindo reenvio e conflito de destino, inclusive o contrato de categoria nula da ação.
 O modelo simulado valida o protocolo e seus efeitos; a interpretação real em português continua
 sujeita à verificação com o fornecedor configurado.
+
+## Cancelamento por conversa (#13)
+
+Use o mesmo `conversation_id` para selecionar e confirmar o atendimento:
+
+1. “Quero cancelar minha consulta.” `cancel_appointment` consulta os atendimentos próprios,
+   ativos e futuros. Compartilha os filtros `appointment_id`, `doctor`, `category`, `from` e `to`
+   de `select_appointment`, incluindo intervalo `[from,to)` e datas RFC3339 no fuso da clínica.
+   Vários candidatos são apresentados sem preparar ação. No próximo turno, o modelo recebe
+   seus IDs verificados para identificar a escolha; um ID vazio exige esclarecimento mesmo
+   com apenas um candidato. IDs desconhecidos ou alheios nunca selecionam outro atendimento.
+2. “O exame de quarta com a Ana.” Uma escolha única prepara `cancel_appointment` no núcleo
+   e apresenta médico, data, categoria, intenção de cancelar e validade. A categoria exibida
+   vem do original; na ação armazenada permanece nula. Mesmo “cancele, confirmo” nesta mensagem
+   apenas prepara o resumo. Nenhuma reserva é alterada nesta etapa.
+3. “Sim, confirmo o cancelamento.” `respond_to_proposal` interpreta a mensagem atual e a aplicação
+   confirma somente a ação vinculada ao resumo anterior. A resposta apresenta o atendimento
+   retornado pelo núcleo com status `cancelled`. Reenvios usam a mesma ação concluída, inclusive
+   após sua validade original, sem incrementar a versão ou cancelar outro atendimento.
+
+Recusa ou ambiguidade consomem a autoridade e informam que o atendimento foi mantido.
+Uma confirmação posterior exige outra preparação e resumo. Trocar o atendimento a cancelar
+também prepara outra proposta, sem executar a anterior. Recusar a referência a um cancelamento
+já concluído não restaura a reserva; a mensagem informa que o cancelamento foi mantido.
+
+As duas operações de identificação compartilham um executor e o schema de seleção porque
+usam os mesmos filtros e regras de elegibilidade. A variação de cancelamento prepara a ação
+imediatamente após a escolha única, sem busca de destino. O fluxo aplica os valores retornados,
+limpa horários e seleção anteriores, guarda os candidatos ou a proposta e remove o original
+de remarcação para impedir a reutilização dessa intenção.
+
+O agente mantém o acesso exclusivo durante o turno e grava a revogação antes da interpretação,
+como nos outros tipos de proposta. `Service.Confirm` trava paciente, ação e atendimento,
+revalida ownership, versão, início, estado e expiração e grava o cancelamento atomicamente.
+Uma falha de escrita reverte a alteração; uma falha de confirmação não produz sucesso e
+exige nova proposta. A gravação final da conversa ocorre após o resultado do núcleo;
+as limitações de recuperação de #14 continuam aplicáveis.
+
+Os testes em `internal/agent/cancellation_test.go` usam `Agent.ReplyConversation` e verificam
+os efeitos por `Service.ListAppointments` e `Service.GetAction`. Cobrem resumo sem mutação,
+confirmação, reenvio após validade, recusa, ambiguidade, troca de alvo, isolamento, inelegibilidade,
+argumentos inválidos, expiração, alteração concorrente e rollback. O modelo é simulado;
+a qualidade da interpretação em português com o fornecedor real não é medida por esses testes.
 
 ## Verificação
 
