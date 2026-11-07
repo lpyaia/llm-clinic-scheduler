@@ -22,10 +22,18 @@ var createAppointmentSchema string
 //go:embed schemas/respond_to_proposal.json
 var respondToProposalSchema string
 
+//go:embed schemas/select_appointment.json
+var selectAppointmentSchema string
+
+//go:embed schemas/reschedule_appointment.json
+var rescheduleAppointmentSchema string
+
 var toolSchemas = tools.Schemas{
-	ListAppointments:   json.RawMessage(listSchema),
-	AppointmentAnswer:  json.RawMessage(appointmentAnswerSchema),
-	FindAvailableSlots: json.RawMessage(findAvailableSlotsSchema),
-	CreateAppointment:  json.RawMessage(createAppointmentSchema),
-	RespondToProposal:  json.RawMessage(respondToProposalSchema),
+	ListAppointments:      json.RawMessage(listSchema),
+	AppointmentAnswer:     json.RawMessage(appointmentAnswerSchema),
+	FindAvailableSlots:    json.RawMessage(findAvailableSlotsSchema),
+	CreateAppointment:     json.RawMessage(createAppointmentSchema),
+	RespondToProposal:     json.RawMessage(respondToProposalSchema),
+	SelectAppointment:     json.RawMessage(selectAppointmentSchema),
+	RescheduleAppointment: json.RawMessage(rescheduleAppointmentSchema),
 }

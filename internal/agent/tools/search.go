@@ -37,18 +37,45 @@ func (s *slotSearch) Execute(ctx context.Context, input Input, raw json.RawMessa
 		return nil, err
 	}
 
-	if question != "" {
-		return searchClarification(preferences, question), nil
+	original := input.Rescheduling
+	newBooking := original != nil && !matchesDoctorName(next.Doctor, original.DoctorName)
+	if newBooking {
+		original = nil
 	}
+
+	var reply ReplyToPatient
+	if question != "" {
+		reply = searchClarification(preferences, question)
+	} else {
+		reply, err = s.findSlots(ctx, preferences, original)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if newBooking {
+		reply.Rescheduling = &ReschedulingUpdate{}
+		reply.Result.Message = "Trocar de médico exige um novo agendamento. O agendamento original será mantido.\n" +
+			reply.Result.Message
+	}
+
+	return reply, nil
+}
+
+// findSlots resolves the catalog and presents real availability after preferences and intent are settled.
+func (s *slotSearch) findSlots(
+	ctx context.Context, preferences SearchPreferences, original *contract.Rescheduling,
+) (ReplyToPatient, error) {
+	next := preferences.criteria
 
 	doctors, err := s.core.ListDoctors(ctx, uuid.Nil)
 	if err != nil {
-		return nil, err
+		return ReplyToPatient{}, err
 	}
 
 	specialties, err := s.core.ListSpecialties(ctx)
 	if err != nil {
-		return nil, err
+		return ReplyToPatient{}, err
 	}
 
 	doctorNames, specialtyNames := map[uuid.UUID]string{}, map[uuid.UUID]string{}
@@ -60,7 +87,17 @@ func (s *slotSearch) Execute(ctx context.Context, input Input, raw json.RawMessa
 		specialtyNames[row.ID] = row.Name
 	}
 
-	doctorID, question := resolveName(next.Doctor, "médico", doctorNames)
+	var (
+		doctorID uuid.UUID
+		question string
+	)
+
+	if original != nil {
+		doctorID = original.DoctorID
+	} else {
+		doctorID, question = resolveName(next.Doctor, "médico", doctorNames)
+	}
+
 	if question != "" {
 		return searchClarification(preferences, question), nil
 	}
@@ -95,7 +132,7 @@ func (s *slotSearch) Execute(ctx context.Context, input Input, raw json.RawMessa
 			return searchClarification(preferences, "Informe um intervalo futuro de até oito semanas."), nil
 		}
 
-		return nil, err
+		return ReplyToPatient{}, err
 	}
 
 	availability := &contract.Availability{
@@ -124,6 +161,10 @@ func (s *slotSearch) Execute(ctx context.Context, input Input, raw json.RawMessa
 	}
 
 	for _, row := range found.Slots {
+		if original != nil && row.ID == original.SlotID {
+			continue
+		}
+
 		slot := contract.Slot{ID: row.ID, DoctorName: row.DoctorName, StartsAt: row.StartsAt.In(s.core.Location)}
 		availability.Slots = append(availability.Slots, slot)
 		fmt.Fprintf(&message, "\n- %s com %s.", slot.StartsAt.Format("02/01/2006 às 15:04 -07:00"), slot.DoctorName)
@@ -157,6 +198,12 @@ func normalizeName(name string) string {
 	return strings.Join(words, " ")
 }
 
+func matchesDoctorName(query, name string) bool {
+	normalized := normalizeName(query)
+
+	return normalized != "" && strings.Contains(" "+normalizeName(name)+" ", " "+normalized+" ")
+}
+
 func resolveName(query, kind string, catalog map[uuid.UUID]string) (uuid.UUID, string) {
 	if query == "" {
 		return uuid.Nil, ""
@@ -170,8 +217,7 @@ func resolveName(query, kind string, catalog map[uuid.UUID]string) (uuid.UUID, s
 	)
 
 	for id, name := range catalog {
-		candidate := normalizeName(name)
-		if normalized != "" && strings.Contains(" "+candidate+" ", " "+normalized+" ") {
+		if matchesDoctorName(normalized, name) {
 			ids, names = append(ids, id), append(names, name)
 		}
 	}

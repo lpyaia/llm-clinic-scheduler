@@ -3,6 +3,7 @@ package tools
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/lpyaia/llm-clinic-scheduler/internal/agent/contract"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/domain"
@@ -23,6 +24,31 @@ func bookingClarification(selection contract.BookingSelection, message string) R
 
 func categoryName(category string) string {
 	return map[string]string{"consultation": "consulta", "exam": "exame", "procedure": "procedimento"}[category]
+}
+
+// Rescheduling actions store no category; presentation uses the verified original's category.
+// Creation and rescheduling share expiry, summary and booking-update construction.
+func proposalReply(
+	action domain.Action, category string, selection contract.BookingSelection, location *time.Location,
+) ReplyToPatient {
+	proposal := &contract.PendingAction{
+		ID: action.ID, Summary: action.Summary, Category: category, ExpiresAt: action.ExpiresAt.In(location),
+	}
+	question := "Você confirma? Responda sim, confirmo para agendar."
+	if action.Operation == domain.RescheduleAppointment {
+		question = "Você confirma a remarcação?"
+	}
+
+	result := contract.Result{
+		Message: fmt.Sprintf(
+			"%s Categoria: %s. Válida até %s. %s",
+			proposal.Summary, categoryName(proposal.Category), proposal.ExpiresAt.Format("02/01/2006 às 15:04 -07:00"),
+			question,
+		),
+		Appointments: []contract.Appointment{}, PendingAction: proposal,
+	}
+
+	return ReplyToPatient{Result: result, Booking: &BookingUpdate{Selection: selection, Proposal: proposal}}
 }
 
 // RenderAppointments presents only verified application data.

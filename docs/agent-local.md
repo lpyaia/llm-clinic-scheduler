@@ -1,4 +1,4 @@
-# Consultas, busca e agendamento conversacional — tickets #7, #10 e #11
+# Consultas, busca, agendamento e remarcação conversacional — tickets #7, #10, #11 e #12
 
 O paciente autenticado consulta seus agendamentos em português por
 `POST /v1/agent/messages`. A ferramenta `list_appointments` reutiliza
@@ -320,6 +320,63 @@ Erros mantêm o envelope HTTP existente: `INVALID_INPUT` (400), `UNAUTHORIZED`
 (401), `MODEL_INVALID_RESPONSE` ou `AGENT_STEP_LIMIT` (502), `AGENT_UNAVAILABLE`
 (503). Falhas de transporte/fornecedor e cancelamentos retornam `INTERNAL_ERROR`
 (500), sem detalhes internos. Sem chave, os outros endpoints continuam disponíveis.
+
+## Remarcação por conversa (#12)
+
+Use o mesmo `conversation_id` nas mensagens posteriores. Exemplo com um exame já agendado:
+
+1. “Quero remarcar meu exame com a Ana.” `select_appointment` consulta somente os agendamentos
+   próprios, futuros e ativos. Aceita `appointment_id`, `doctor`, `category`, `from` e `to`;
+   os filtros descrevem o atendimento original. Datas usam RFC3339 e intervalo `[from,to)`.
+   Se houver vários candidatos, a resposta apresenta a lista e pede qual deseja. O modelo recebe
+   os IDs verificados dos candidatos no próximo turno. `appointment_id` vazio força esclarecimento,
+   inclusive quando resta apenas um candidato; nenhum resultado autoriza selecionar uma reserva alheia.
+2. “O de quarta-feira.” Após identificar uma única reserva, a resposta apresenta seus dados e pede
+   o destino. “Mostre os horários da próxima semana” usa `find_available_slots`, conservando o
+   ID do médico original, inclusive quando existem médicos com nomes iguais. O horário original
+   não é uma opção de destino. A busca apresenta somente horários reais e mantém as políticas do núcleo.
+3. “Quero o primeiro, pode remarcar.” `reschedule_appointment` aceita somente `slot_id`, de um
+   horário apresentado. Um ID ausente ou ambíguo pede esclarecimento. A ferramenta prepara a ação
+   `reschedule_appointment` no núcleo, sem mudar a reserva. O resumo mostra data original, destino,
+   médico, categoria e validade. A categoria exibida vem do atendimento original; na ação armazenada
+   permanece nula, conforme o contrato do banco para remarcação.
+4. “Sim, confirmo a remarcação.” `respond_to_proposal` interpreta a mensagem atual. Somente
+   `confirm`, vinculado à ação apresentada em turno anterior, chama `Service.Confirm`.
+   O núcleo preserva ID, médico e categoria e altera o horário em uma transação. Reenviar a
+   confirmação utiliza a mesma ação concluída, sem executar outra alteração.
+
+Recusa, pergunta, condição ou ambiguidade não executam a remarcação e consomem a proposta.
+Para escolher outro destino, prepare outro resumo antes de confirmar. A mensagem de recusa informa
+que o original foi mantido. Se a proposta já tiver sido concluída, descartar sua referência de
+reenvio também não desfaz a alteração realizada.
+
+“Prefiro com o Bruno” inicia a intenção de novo agendamento, explica que o original será mantido e
+busca horários do novo médico na mesma execução. “Prefiro consulta em vez de exame”
+usa `create_appointment` e prepara um novo atendimento, que exige seu próprio resumo e confirmação.
+Esses caminhos nunca cancelam nem alteram automaticamente o atendimento original.
+
+O fluxo guarda separadamente os candidatos próprios (`Candidates`) e o original selecionado
+(`Rescheduling`). Selecionar outro original limpa horários e propostas anteriores; buscar destinos
+limpa a seleção de slot e a autoridade anterior, conservando o original. As ferramentas devolvem
+valores explícitos, aplicados pelo fluxo; não acessam o armazenamento da conversa.
+
+O agente conserva o acesso exclusivo à conversa durante todo o turno. Antes de interpretar uma
+resposta, grava a revogação da autoridade anterior. Na confirmação, o núcleo trava paciente, ação,
+agendamento e destino, revalida ownership, versão, validade, disponibilidade e limite semanal e
+grava a alteração atomicamente. Um conflito de destino ou falha de escrita preserva a reserva
+original e não produz mensagem de sucesso. A transação interna reverte uma escrita malsucedida;
+o armazenamento da conversa continua com a proposta revogada. Os limites de recuperação após
+sucesso do núcleo e falha da gravação da conversa permanecem os descritos acima, com ampliação em #14.
+
+Os testes em `internal/agent/rescheduling_test.go` exercitam a interface pública do agente e
+consultam os efeitos pelas operações públicas do núcleo. Cobrem ambiguidade e isolamento,
+filtros do original, médicos homônimos, preparação sem alteração, confirmação e reenvio,
+recusa, esclarecimento, troca de médico/categoria, destinos não apresentados, conflito,
+expiração, mudança concorrente do original e rollback após falha de escrita.
+O teste `TestConversationalReschedulingPostgres` também prepara e confirma propostas pelo agente
+com o banco real, cobrindo reenvio e conflito de destino, inclusive o contrato de categoria nula da ação.
+O modelo simulado valida o protocolo e seus efeitos; a interpretação real em português continua
+sujeita à verificação com o fornecedor configurado.
 
 ## Verificação
 

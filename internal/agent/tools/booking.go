@@ -3,7 +3,6 @@ package tools
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/agent/contract"
@@ -89,18 +88,5 @@ func (b *bookingPreparation) Execute(ctx context.Context, input Input, raw json.
 		return nil, err
 	}
 
-	proposal := &contract.PendingAction{
-		ID: action.ID, Summary: action.Summary, Category: action.Category,
-		ExpiresAt: action.ExpiresAt.In(b.core.Location),
-	}
-
-	result := contract.Result{
-		Message: fmt.Sprintf(
-			"%s Categoria: %s. Válida até %s. Você confirma? Responda sim, confirmo para agendar.",
-			proposal.Summary, categoryName(proposal.Category), proposal.ExpiresAt.Format("02/01/2006 às 15:04 -07:00"),
-		),
-		Appointments: []contract.Appointment{}, PendingAction: proposal,
-	}
-
-	return ReplyToPatient{Result: result, Booking: &BookingUpdate{Selection: selection, Proposal: proposal}}, nil
+	return proposalReply(action, action.Category, selection, b.core.Location), nil
 }
