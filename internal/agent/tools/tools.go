@@ -12,7 +12,7 @@ import (
 
 // Executor separates tool definitions and execution from model-loop policy.
 // Execute receives a snapshot, never conversation storage. It must not mutate
-// supplied slices. On error the caller discards the outcome; successful updates
+// supplied data. On error the caller discards the outcome; successful updates
 // are applied by the flow and persisted only after a valid reply.
 type Executor interface {
 	Definition() contract.Tool
@@ -22,19 +22,22 @@ type Executor interface {
 // Input carries application-authenticated identity and explicit conversation values.
 // Model arguments cannot override Principal. Offered is a read-only snapshot.
 type Input struct {
-	Principal domain.Principal
-	Search    SearchPreferences
-	Selection contract.BookingSelection
-	Offered   []contract.Slot
+	Principal    domain.Principal
+	Search       SearchPreferences
+	Selection    contract.BookingSelection
+	Offered      []contract.Slot
+	Rescheduling *contract.Rescheduling
 }
 
 // Schemas are embedded by the agent composition root, independent of execution.
 type Schemas struct {
-	ListAppointments   json.RawMessage
-	AppointmentAnswer  json.RawMessage
-	FindAvailableSlots json.RawMessage
-	CreateAppointment  json.RawMessage
-	RespondToProposal  json.RawMessage
+	ListAppointments      json.RawMessage
+	AppointmentAnswer     json.RawMessage
+	FindAvailableSlots    json.RawMessage
+	CreateAppointment     json.RawMessage
+	RespondToProposal     json.RawMessage
+	SelectAppointment     json.RawMessage
+	RescheduleAppointment json.RawMessage
 }
 
 // New supplies the supported tools; the flow limits their availability per turn.
@@ -43,6 +46,8 @@ func New(core *application.Service, schemas Schemas) []Executor {
 		&appointmentQuery{core: core, schema: schemas},
 		&slotSearch{core: core, schema: schemas},
 		&bookingPreparation{core: core, schema: schemas},
+		&appointmentSelection{core: core, schema: schemas.SelectAppointment},
+		&reschedulingPreparation{core: core, schema: schemas.RescheduleAppointment},
 		&proposalResponse{schema: schemas.RespondToProposal},
 	}
 }
@@ -70,9 +75,15 @@ func (ReturnToModel) toolOutcome() {}
 // update to that part of the state. Search replies include preferences even
 // when clarification is needed; booking replies include the incomplete selection.
 type ReplyToPatient struct {
-	Result  contract.Result
-	Search  *SearchPreferences
-	Booking *BookingUpdate
+	Result       contract.Result
+	Search       *SearchPreferences
+	Booking      *BookingUpdate
+	Rescheduling *ReschedulingUpdate
+}
+
+// ReschedulingUpdate replaces the selected original, including clearing it for a new booking.
+type ReschedulingUpdate struct {
+	Selected *contract.Rescheduling
 }
 
 func (ReplyToPatient) toolOutcome() {}

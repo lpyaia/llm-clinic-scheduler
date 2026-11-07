@@ -87,3 +87,10 @@ type BookingSelection struct {
 	SlotID   uuid.UUID `json:"selected_slot_id"`
 	Category string    `json:"category"`
 }
+
+// Rescheduling retains a verified original; model arguments cannot change its doctor or category.
+type Rescheduling struct {
+	Appointment
+	DoctorID uuid.UUID `json:"-"`
+	SlotID   uuid.UUID `json:"-"`
+}

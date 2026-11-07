@@ -1,0 +1,53 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "appointment_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "ID de um agendamento próprio identificado no contexto; null lista candidatos, vazio pede escolha."
+    },
+    "doctor": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Nome do médico do agendamento original, se informado."
+    },
+    "category": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "consultation",
+        "exam",
+        "procedure",
+        null
+      ]
+    },
+    "from": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Início inclusivo RFC3339 para identificar a data original."
+    },
+    "to": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Fim exclusivo RFC3339 para identificar a data original."
+    }
+  },
+  "required": [
+    "appointment_id",
+    "doctor",
+    "category",
+    "from",
+    "to"
+  ]
+}

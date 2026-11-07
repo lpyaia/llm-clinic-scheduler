@@ -18,6 +18,7 @@ type proposalBinding struct {
 	Revision  uint64         `json:"revision"`
 	Proposal  *PendingAction `json:"proposal,omitempty"`
 	Completed bool           `json:"completed"`
+	Operation string         `json:"operation"`
 }
 
 func (f *conversationFlow) bindProposal() bool {
@@ -49,7 +50,8 @@ func (f *conversationFlow) validateBinding(ctx context.Context) error {
 		return err
 	}
 
-	if action.PatientID != f.binding.PatientID || action.Operation != domain.CreateAppointment {
+	if action.PatientID != f.binding.PatientID ||
+		(action.Operation != domain.CreateAppointment && action.Operation != domain.RescheduleAppointment) {
 		return domain.ErrNotFound
 	}
 
@@ -69,10 +71,20 @@ func (f *conversationFlow) validateBinding(ctx context.Context) error {
 		return domain.ErrActionExpired
 	}
 
+	category := action.Category
+	if action.Operation == domain.RescheduleAppointment {
+		if action.Result != nil {
+			category = action.Result.Category
+		} else if f.binding.Proposal != nil {
+			category = f.binding.Proposal.Category
+		}
+	}
+
 	f.binding.Proposal = &PendingAction{
-		ID: action.ID, Summary: action.Summary, Category: action.Category,
+		ID: action.ID, Summary: action.Summary, Category: category,
 		ExpiresAt: action.ExpiresAt.In(f.core.Location),
 	}
+	f.binding.Operation = action.Operation
 
 	return nil
 }
@@ -87,11 +99,23 @@ func (f *conversationFlow) respondToProposal(ctx context.Context, decision strin
 
 	switch decision {
 	case "confirm":
-		return f.confirmBooking(ctx, bound.ID)
+		return f.confirmBooking(ctx, bound.ID, bound.Operation)
 	case "reject":
 		f.state.Selection = BookingSelection{}
+
+		if bound.Operation == domain.RescheduleAppointment && !bound.Completed {
+			return tools.Clarification("Remarcação descartada. O agendamento original foi mantido."), nil
+		}
+
 		return tools.Clarification("Proposta descartada. Nenhum novo agendamento foi realizado."), nil
 	case "clarify":
+		if bound.Operation == domain.RescheduleAppointment && !bound.Completed {
+			return tools.Clarification(
+				"A remarcação não foi confirmada. O agendamento original foi mantido. " +
+					"Qual novo horário deseja? Leia o novo resumo antes de confirmar.",
+			), nil
+		}
+
 		return tools.Clarification(
 			"A proposta não foi confirmada. Qual horário e categoria você deseja? " +
 				"Leia o novo resumo antes de confirmar.",
@@ -101,7 +125,7 @@ func (f *conversationFlow) respondToProposal(ctx context.Context, decision strin
 	}
 }
 
-func (f *conversationFlow) confirmBooking(ctx context.Context, id uuid.UUID) (Result, error) {
+func (f *conversationFlow) confirmBooking(ctx context.Context, id uuid.UUID, operation string) (Result, error) {
 	row, err := f.core.Confirm(ctx, f.principal, id)
 	if err != nil {
 		return Result{}, err
@@ -115,5 +139,14 @@ func (f *conversationFlow) confirmBooking(ctx context.Context, id uuid.UUID) (Re
 		Status: row.Status, StartsAt: row.StartsAt.In(f.core.Location),
 	}}
 
-	return Result{Message: "Agendamento confirmado.\n" + tools.RenderAppointments(rows), Appointments: rows}, nil
+	message := "Agendamento confirmado.\n"
+
+	if operation == domain.RescheduleAppointment {
+		f.state.Rescheduling = &contract.Rescheduling{
+			Appointment: rows[0], DoctorID: row.DoctorID, SlotID: row.SlotID,
+		}
+		message = "Remarcação confirmada.\n"
+	}
+
+	return Result{Message: message + tools.RenderAppointments(rows), Appointments: rows}, nil
 }

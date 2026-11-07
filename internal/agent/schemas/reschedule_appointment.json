@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "slot_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "ID do novo horário apresentado para o médico original; null ou vazio pede esclarecimento."
+    }
+  },
+  "required": [
+    "slot_id"
+  ]
+}

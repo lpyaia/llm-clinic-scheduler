@@ -216,23 +216,23 @@ func (s *Service) Prepare(ctx context.Context, p domain.Principal, in PrepareInp
 		}
 
 		a.ExpectedVersion = appointment.Version
-		doctor, start := slot.DoctorName, slot.StartsAt
-
-		verb := "Agendar"
 		if a.Operation == domain.RescheduleAppointment {
-			verb = "Remarcar"
-		}
+			a.Summary = fmt.Sprintf(
+				"Remarcar atendimento com %s de %s para %s?",
+				slot.DoctorName, appointment.StartsAt.In(s.Location).Format("02/01/2006 às 15:04"),
+				slot.StartsAt.In(s.Location).Format("02/01/2006 às 15:04"),
+			)
+		} else {
+			verb, doctor, start := "Agendar", slot.DoctorName, slot.StartsAt
+			if a.Operation == domain.CancelAppointment {
+				verb, doctor, start = "Cancelar", appointment.DoctorName, appointment.StartsAt
+			}
 
-		if a.Operation == domain.CancelAppointment {
-			verb, doctor, start = "Cancelar", appointment.DoctorName, appointment.StartsAt
+			a.Summary = fmt.Sprintf(
+				"%s atendimento com %s em %s?",
+				verb, doctor, start.In(s.Location).Format("02/01/2006 às 15:04"),
+			)
 		}
-
-		a.Summary = fmt.Sprintf(
-			"%s atendimento com %s em %s?",
-			verb,
-			doctor,
-			start.In(s.Location).Format("02/01/2006 às 15:04"),
-		)
 
 		return r.InsertAction(ctx, a)
 	})
