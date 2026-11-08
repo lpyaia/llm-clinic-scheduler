@@ -17,6 +17,7 @@ import (
 	"github.com/lpyaia/llm-clinic-scheduler/internal/application"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/domain"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/timeouts"
+	"github.com/lpyaia/llm-clinic-scheduler/internal/trace"
 )
 
 type localKey int
@@ -95,6 +96,7 @@ func New(
 		ctx, cancel := timeouts.Context(c.Context(), requestTimeout)
 		defer cancel()
 
+		ctx = trace.WithRequestID(ctx, id)
 		c.SetContext(ctx)
 
 		start := time.Now()

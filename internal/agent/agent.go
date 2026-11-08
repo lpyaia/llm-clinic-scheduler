@@ -12,6 +12,7 @@ import (
 	"github.com/lpyaia/llm-clinic-scheduler/internal/agent/tools"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/application"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/domain"
+	"github.com/lpyaia/llm-clinic-scheduler/internal/trace"
 )
 
 const MaxSteps = 4
@@ -97,6 +98,8 @@ type Agent struct {
 	// ClinicContact is trusted operator configuration. Set it before serving requests.
 	// Patient messages and model arguments cannot override it.
 	ClinicContact string
+	// Traces is optional and must be configured before serving requests.
+	Traces *trace.JSONL
 
 	core          *application.Service
 	model         Model
@@ -124,7 +127,18 @@ func (a *Agent) ReplyConversation(
 	principal domain.Principal,
 	id uuid.UUID,
 	message string,
-) (Result, error) {
+) (result Result, resultErr error) {
+	run := a.Traces.Start(ctx, message)
+
+	defer func() {
+		if value := recover(); value != nil {
+			run.Finish(nil, errors.New("agent execution interrupted"))
+			panic(value)
+		}
+
+		run.Finish(result, resultErr)
+	}()
+
 	message = strings.TrimSpace(message)
 
 	if principal.PatientID == uuid.Nil {
@@ -144,9 +158,14 @@ func (a *Agent) ReplyConversation(
 		id = uuid.New()
 	}
 
+	run.SetConversationID(id)
+
 	access := ConversationAccess{CreateConversation: createConversation, Wait: false}
 
+	acquireStep := run.StartStep(trace.Step{Kind: "conversation.acquire"}, nil)
 	locked, err := a.conversations.Acquire(ctx, principal.PatientID, id, access)
+	acquireStep.End(nil, err)
+
 	if errors.Is(err, ErrConversationBusy) {
 		return Result{}, domain.Failure(
 			"INVALID_INPUT",
@@ -156,6 +175,10 @@ func (a *Agent) ReplyConversation(
 
 	if err != nil {
 		return Result{}, err
+	}
+
+	if run != nil {
+		locked = &tracedConversation{LockedConversation: locked, run: run}
 	}
 
 	defer locked.Release()
@@ -170,7 +193,10 @@ func (a *Agent) ReplyConversation(
 	}
 
 	if flow.state.Uncertain != nil {
+		recoveryStep := run.StartStep(trace.Step{Kind: "confirmation.recover"}, nil)
 		out, err := flow.recoverConfirmation(ctx)
+		recoveryStep.End(out, err)
+
 		if err == nil {
 			flow.rememberExchange(message, out.Message)
 		}
@@ -196,11 +222,17 @@ func (a *Agent) ReplyConversation(
 		}
 	}
 
-	if err := flow.validateBinding(ctx); err != nil {
-		return Result{}, failTurn(ctx, locked, id, err)
+	if flow.binding != nil {
+		bindingStep := run.StartStep(trace.Step{Kind: "proposal.validate"}, nil)
+		err := flow.validateBinding(ctx)
+		bindingStep.End(nil, err)
+
+		if err != nil {
+			return Result{}, failTurn(ctx, locked, id, err)
+		}
 	}
 
-	out, err := a.replyWithModel(ctx, message, flow, locked)
+	out, err := a.replyWithModel(ctx, message, flow, locked, run)
 	if err != nil {
 		return Result{}, failTurn(ctx, locked, id, err)
 	}
@@ -217,6 +249,7 @@ func (a *Agent) ReplyConversation(
 
 func (a *Agent) replyWithModel(
 	ctx context.Context, message string, flow *conversationFlow, locked LockedConversation,
+	run *trace.Run,
 ) (Result, error) {
 	in, err := flow.request(message)
 	if err != nil {
@@ -231,10 +264,16 @@ func (a *Agent) replyWithModel(
 
 	for range MaxSteps {
 		if err := ctx.Err(); err != nil {
+			interrupted := run.StartStep(trace.Step{Kind: "interrupted"}, nil)
+			interrupted.End(nil, err)
+
 			return Result{}, err
 		}
 
+		modelStep := run.StartStep(trace.Step{Kind: "model"}, in)
 		response, err := a.model.Complete(ctx, in)
+		modelStep.End(response, errors.Join(err, ctx.Err()))
+
 		if err != nil {
 			return Result{}, fmt.Errorf("model completion: %w", err)
 		}
@@ -244,24 +283,47 @@ func (a *Agent) replyWithModel(
 		}
 
 		if len(response.ToolCalls) == 0 {
+			answerStep := run.StartStep(trace.Step{Kind: "answer", ParentID: modelStep.ID()}, response.Content)
 			if finalize == nil {
+				answerStep.End(nil, contract.InvalidResponse())
+
 				return Result{}, contract.InvalidResponse()
 			}
 
-			return finalize(response.Content)
+			out, err := finalize(response.Content)
+			answerStep.End(out, err)
+
+			return out, err
 		}
 
 		if len(response.ToolCalls) != 1 || len(bytes.TrimSpace(response.Content)) != 0 {
+			validation := run.StartStep(trace.Step{Kind: "validation", ParentID: modelStep.ID()}, response)
+			validation.End(nil, contract.InvalidResponse())
+
 			return Result{}, contract.InvalidResponse()
 		}
 
 		call := response.ToolCalls[0]
 		if call.ID == "" || seenCalls[call.ID] {
+			validation := run.StartStep(trace.Step{Kind: "validation", ParentID: modelStep.ID()}, response)
+			validation.End(nil, contract.InvalidResponse())
+
 			return Result{}, contract.InvalidResponse()
 		}
 
+		toolName := "unknown"
+		if _, known := flow.handlers[call.Name]; known {
+			toolName = call.Name
+		}
+
+		toolStep := run.StartStep(trace.Step{
+			Kind: "tool", ParentID: modelStep.ID(), ToolName: toolName, CallID: call.ID,
+		}, call.Arguments)
+
 		outcome, err := flow.executeTool(ctx, call)
 		if err != nil {
+			toolStep.End(nil, err)
+
 			return Result{}, err
 		}
 
@@ -269,8 +331,12 @@ func (a *Agent) replyWithModel(
 
 		switch out := outcome.(type) {
 		case tools.ProposalResponse:
-			return flow.respondToProposal(ctx, out.Decision, locked)
+			result, err := flow.respondToProposal(ctx, out.Decision, locked)
+			toolStep.End(result, err)
+
+			return result, err
 		case tools.ReturnToModel:
+			toolStep.End(out.Content, nil)
 			finalize = out.Finalize
 			in.Tools = flow.availableTools()
 			in.RequireTool = false
@@ -282,11 +348,19 @@ func (a *Agent) replyWithModel(
 				Message{Role: "tool", Content: string(out.Content), ToolCallID: call.ID},
 			)
 		case tools.ReplyToPatient:
+			toolStep.End(out.Result, nil)
+
 			return out.Result, nil
 		default:
+			toolStep.End(nil, contract.InvalidResponse())
+
 			return Result{}, contract.InvalidResponse()
 		}
 	}
 
-	return Result{}, domain.Failure("AGENT_STEP_LIMIT", "O assistente atingiu o limite de etapas. Tente novamente.")
+	err = domain.Failure("AGENT_STEP_LIMIT", "O assistente atingiu o limite de etapas. Tente novamente.")
+	limit := run.StartStep(trace.Step{Kind: "limit"}, nil)
+	limit.End(nil, err)
+
+	return Result{}, err
 }
