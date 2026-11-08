@@ -402,9 +402,11 @@ Uma confirmação posterior exige outra preparação e resumo. Trocar o atendime
 também prepara outra proposta, sem executar a anterior. Recusar a referência a um cancelamento
 já concluído não restaura a reserva; a mensagem informa que o cancelamento foi mantido.
 
-As duas operações de identificação compartilham um executor e o schema de seleção porque
-usam os mesmos filtros e regras de elegibilidade. A variação de cancelamento prepara a ação
-imediatamente após a escolha única, sem busca de destino. O fluxo aplica os valores retornados,
+`cancel_appointment` tem executor próprio em `tools/cancellation.go` e schema próprio em
+`schemas/cancel_appointment.json`. `select_appointment` identifica somente o original de remarcação.
+As tools reutilizam apenas a validação dos filtros e a consulta de candidatos elegíveis,
+em `tools/appointment_candidates.go`; cada uma constrói sua resposta e suas atualizações.
+O cancelamento prepara a ação após a escolha única, sem busca de destino. O fluxo aplica os valores retornados,
 limpa horários e seleção anteriores, guarda os candidatos ou a proposta e remove o original
 de remarcação para impedir a reutilização dessa intenção.
 
