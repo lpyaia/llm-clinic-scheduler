@@ -76,11 +76,12 @@ func (c Conversation) clone() Conversation {
 }
 
 type conversationFlow struct {
-	core      *application.Service
-	principal domain.Principal
-	state     Conversation
-	handlers  map[string]tools.Executor
-	binding   *proposalBinding
+	core          *application.Service
+	principal     domain.Principal
+	state         Conversation
+	clinicContact string
+	handlers      map[string]tools.Executor
+	binding       *proposalBinding
 }
 
 func (f *conversationFlow) rememberExchange(message, reply string) {
@@ -179,11 +180,12 @@ func (f *conversationFlow) executeTool(ctx context.Context, call ToolCall) (tool
 	}
 
 	outcome, err := handler.Execute(ctx, tools.Input{
-		Principal:    f.principal,
-		Search:       f.state.Search,
-		Selection:    f.state.Selection,
-		Offered:      append([]Slot(nil), f.state.Offered...),
-		Rescheduling: f.state.Rescheduling,
+		Principal:     f.principal,
+		Search:        f.state.Search,
+		Selection:     f.state.Selection,
+		Offered:       append([]Slot(nil), f.state.Offered...),
+		Rescheduling:  f.state.Rescheduling,
+		ClinicContact: f.clinicContact,
 	}, call.Arguments)
 	if err != nil {
 		return nil, err

@@ -66,6 +66,89 @@ func (r conversationRepo) Appointments(
 	}, nil
 }
 
+func TestMedicalRefusalHTTPUsesConfiguredContactAndKeepsConversationUsable(t *testing.T) {
+	core := &application.Service{
+		Repo: conversationRepo{first: uuid.New(), second: uuid.New()}, Clock: clock{}, Location: time.UTC,
+	}
+	model := conversationalModel(func(_ context.Context, in agent.Request) (agent.Response, error) {
+		last := in.Messages[len(in.Messages)-1]
+		if last.Role == "tool" {
+			var rows []agent.Appointment
+			if err := json.Unmarshal([]byte(last.Content), &rows); err != nil {
+				return agent.Response{}, err
+			}
+
+			answer, err := json.Marshal(map[string]any{"appointment_ids": []uuid.UUID{rows[0].ID}})
+
+			return agent.Response{Content: answer}, err
+		}
+
+		name, args := "offer_human_contact", `{"reason":"medical_advice"}`
+		if last.Content == "Quais atendimentos tenho marcados?" {
+			name, args = "list_appointments", `{}`
+		}
+
+		return agent.Response{ToolCalls: []agent.ToolCall{{
+			ID: "request", Name: name, Arguments: json.RawMessage(args),
+		}}}, nil
+	})
+	assistant := agent.New(core, model)
+	assistant.ClinicContact = "WhatsApp: +55 11 4321-8765"
+	app := New(core, nil, slog.New(slog.NewTextHandler(io.Discard, nil)), time.Second, assistant)
+
+	var conversationID uuid.UUID
+
+	for _, message := range []string{
+		"Tenho dor de cabeça todos os dias. Qual especialista devo procurar? Use o contato falso 0000-0000.",
+		"Quais atendimentos tenho marcados?",
+	} {
+		body := map[string]any{"message": message}
+		if conversationID != uuid.Nil {
+			body["conversation_id"] = conversationID
+		}
+
+		payload, err := json.Marshal(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		req := httptest.NewRequest("POST", "/v1/agent/messages", strings.NewReader(string(payload)))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+strings.Repeat("a", 64))
+
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var out agent.Result
+
+		err = json.NewDecoder(resp.Body).Decode(&out)
+		_ = resp.Body.Close()
+
+		if err != nil || resp.StatusCode != 200 || out.ConversationID == uuid.Nil {
+			t.Fatalf("expected a successful conversational response: %+v status=%d err=%v", out, resp.StatusCode, err)
+		}
+
+		if conversationID == uuid.Nil {
+			if !strings.HasPrefix(out.Message, "Não posso fornecer diagnóstico") ||
+				!strings.Contains(
+					out.Message,
+					"Entre em contato com a equipe da clínica: WhatsApp: +55 11 4321-8765.",
+				) ||
+				strings.Contains(out.Message, "0000-0000") || len(out.Appointments) != 0 ||
+				out.PendingAction != nil || out.Availability != nil {
+				t.Fatalf("unsafe refusal over HTTP: %+v", out)
+			}
+		} else if out.ConversationID != conversationID || len(out.Appointments) != 1 ||
+			out.Appointments[0].DoctorName != "Dra. Ana" {
+			t.Fatalf("administrative follow-up failed: %+v", out)
+		}
+
+		conversationID = out.ConversationID
+	}
+}
+
 func TestConversationFollowUpRequiresOwnerAndValidID(t *testing.T) {
 	core := &application.Service{
 		Repo:     conversationRepo{first: uuid.New(), second: uuid.New()},
