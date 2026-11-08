@@ -296,10 +296,11 @@ interpretação malsucedida também a consome. Confirmações expiradas deixam d
 repetir `ACTION_EXPIRED`: a primeira tentativa revoga a referência, e as próximas
 exigem nova preparação. Validade e ownership continuam protegidos pelo núcleo.
 
-Se o núcleo confirmar e a gravação final falhar ou for cancelada, o agendamento
-permanece, mas a referência conversacional já foi revogada. Consulte a listagem
-para verificar o resultado; a recuperação ampliada fica em #14. Preparar sem
-conseguir gravar a resposta nunca concede autoridade para confirmar a ação.
+Antes de confirmar, o fluxo salva uma referência de consulta (`Uncertain`) sem
+restaurar autoridade. Se o núcleo confirmar e a gravação final falhar ou for
+cancelada, a próxima mensagem consulta essa ação antes de interpretar outro pedido.
+O resultado vem do núcleo, sem executar outra mutação. Preparar sem conseguir
+gravar a resposta nunca concede autoridade para confirmar a ação.
 
 O histórico conserva as últimas dez interações completas; preferências estruturadas
 permanecem. Reiniciar o processo perde as conversas, e IDs antigos retornam
@@ -319,7 +320,8 @@ conta do fornecedor. Interpretar uma resposta à proposta usa uma chamada ao for
 Erros mantêm o envelope HTTP existente: `INVALID_INPUT` (400), `UNAUTHORIZED`
 (401), `MODEL_INVALID_RESPONSE` ou `AGENT_STEP_LIMIT` (502), `AGENT_UNAVAILABLE`
 (503). Falhas de transporte/fornecedor e cancelamentos retornam `INTERNAL_ERROR`
-(500), sem detalhes internos. Sem chave, os outros endpoints continuam disponíveis.
+(500), sem detalhes internos. Erros de turnos iniciados incluem `error.conversation_id`
+para retomar e orientação em português. Sem chave, os outros endpoints continuam disponíveis.
 
 ## Remarcação por conversa (#12)
 
@@ -365,8 +367,8 @@ resposta, grava a revogação da autoridade anterior. Na confirmação, o núcle
 agendamento e destino, revalida ownership, versão, validade, disponibilidade e limite semanal e
 grava a alteração atomicamente. Um conflito de destino ou falha de escrita preserva a reserva
 original e não produz mensagem de sucesso. A transação interna reverte uma escrita malsucedida;
-o armazenamento da conversa continua com a proposta revogada. Os limites de recuperação após
-sucesso do núcleo e falha da gravação da conversa permanecem os descritos acima, com ampliação em #14.
+o armazenamento da conversa continua com a proposta revogada. Resultados incertos são consultados
+antes de qualquer nova operação, conforme o fluxo de recuperação abaixo.
 
 Os testes em `internal/agent/rescheduling_test.go` exercitam a interface pública do agente e
 consultam os efeitos pelas operações públicas do núcleo. Cobrem ambiguidade e isolamento,
@@ -415,13 +417,55 @@ como nos outros tipos de proposta. `Service.Confirm` trava paciente, ação e at
 revalida ownership, versão, início, estado e expiração e grava o cancelamento atomicamente.
 Uma falha de escrita reverte a alteração; uma falha de confirmação não produz sucesso e
 exige nova proposta. A gravação final da conversa ocorre após o resultado do núcleo;
-as limitações de recuperação de #14 continuam aplicáveis.
+a referência salva antes da confirmação permite recuperar seu resultado se essa gravação falhar.
 
 Os testes em `internal/agent/cancellation_test.go` usam `Agent.ReplyConversation` e verificam
 os efeitos por `Service.ListAppointments` e `Service.GetAction`. Cobrem resumo sem mutação,
 confirmação, reenvio após validade, recusa, ambiguidade, troca de alvo, isolamento, inelegibilidade,
 argumentos inválidos, expiração, alteração concorrente e rollback. O modelo é simulado;
 a qualidade da interpretação em português com o fornecedor real não é medida por esses testes.
+
+## Recuperação de conversas (#14)
+
+O envelope de erro conserva código, status HTTP e `request_id`. Após a primeira
+gravação do turno, inclui também `error.conversation_id`; reutilize esse ID na
+próxima mensagem. `TurnError` preserva a causa para `errors.Is` e `errors.As`, mas
+expõe somente a explicação segura em português. Falhas não entram no histórico
+como interações concluídas, nem aplicam preferências de uma busca malsucedida.
+
+- `SLOT_UNAVAILABLE` descarta a seleção e os horários anteriores e oferece nova busca.
+- `WEEKLY_LIMIT_REACHED` explica o limite de três na semana escolhida e oferece
+  outra semana ou a consulta dos atendimentos para remarcar um deles. A regra do núcleo é mantida.
+- `ACTION_EXPIRED` descarta a seleção e exige nova preparação, resumo e confirmação.
+- `APPOINTMENT_CHANGED` também descarta o original selecionado e seus candidatos;
+  uma nova identificação consulta o estado atual antes de preparar outra proposta.
+- Busca sem disponibilidade apresenta o intervalo efetivamente pesquisado,
+  inclusive expansão automática, e pede mudança dos critérios sem sugerir horários inventados.
+- Falha de modelo, resposta inválida, timeout e limite de passos encerram o turno
+  com orientação para retomar, sem afirmar que uma operação ocorreu.
+
+`Agent.ReplyConversation` mantém acesso exclusivo por todo o turno. A revogação
+continua anterior à interpretação. Depois de uma decisão válida de confirmar,
+o fluxo salva `Uncertain` antes de chamar `Service.Confirm`; falha nessa gravação
+impede a mutação. Uma falha de negócio terminal limpa a referência e as escolhas
+obsoletas. Falha transitória, cancelamento ou falha na gravação final conservam a
+referência salva, sem restaurar a proposta. Preferências e histórico continuam sujeitos a rollback.
+
+A próxima mensagem com `Uncertain` consulta `Service.GetAction` antes do modelo:
+
+- `succeeded`: apresenta o resultado armazenado e salva `Completed` para reenvios idempotentes.
+  Informa que um novo pedido deve ser reenviado; o pedido atual apenas recupera o resultado anterior.
+- `pending`: retorna `ACTION_NOT_COMPLETED` (409), descarta a referência e exige
+  nova preparação e confirmação. A consulta não chama `Confirm` nem repete a mutação.
+- `failed`: explica a falha de negócio, descarta a proposta e exige outro resumo.
+- Falha na consulta: mantém a referência e bloqueia novas operações até verificar o resultado.
+
+Os testes em `internal/agent/recovery_test.go` injetam falhas nas fronteiras do modelo,
+repositório e armazenamento, exercitam `Agent.ReplyConversation` e verificam os efeitos
+por `Service.ListAppointments`. Cobrem perda da resposta de commit nas três operações,
+falha de consulta, rollback, gravação interrompida, cancelamento após commit, expiração,
+mudança concorrente, limite semanal e recuperação com nova confirmação. A memória
+continua local ao processo; persistência e coordenação entre instâncias permanecem em #26 e #27.
 
 ## Verificação
 

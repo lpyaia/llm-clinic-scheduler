@@ -347,7 +347,13 @@ func TestCancellationConfirmationFailuresNeverReportSuccess(t *testing.T) {
 			}
 
 			_, err = a.ReplyConversation(ctx, p, proposal.ConversationID, "Confirmo novamente")
-			if domain.ErrorCode(err) != "MODEL_INVALID_RESPONSE" {
+
+			retryCode := "MODEL_INVALID_RESPONSE"
+			if scenario == "write failure" {
+				retryCode = "ACTION_NOT_COMPLETED"
+			}
+
+			if domain.ErrorCode(err) != retryCode {
 				t.Fatalf("failed confirmation retained authority: %v", err)
 			}
 		})

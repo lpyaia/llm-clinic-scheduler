@@ -90,7 +90,9 @@ func (f *conversationFlow) validateBinding(ctx context.Context) error {
 	return nil
 }
 
-func (f *conversationFlow) respondToProposal(ctx context.Context, decision string) (Result, error) {
+func (f *conversationFlow) respondToProposal(
+	ctx context.Context, decision string, locked LockedConversation,
+) (Result, error) {
 	bound := f.binding
 	if bound == nil || bound.PatientID != f.principal.PatientID || bound.Revision != f.state.Revision {
 		return Result{}, contract.InvalidResponse()
@@ -100,7 +102,7 @@ func (f *conversationFlow) respondToProposal(ctx context.Context, decision strin
 
 	switch decision {
 	case "confirm":
-		return f.confirmBooking(ctx, bound.ID, bound.Operation)
+		return f.confirmBooking(ctx, bound.ID, bound.Operation, locked)
 	case "reject":
 		f.state.Selection = BookingSelection{}
 
@@ -145,13 +147,29 @@ func (f *conversationFlow) respondToProposal(ctx context.Context, decision strin
 	}
 }
 
-func (f *conversationFlow) confirmBooking(ctx context.Context, id uuid.UUID, operation string) (Result, error) {
+func (f *conversationFlow) confirmBooking(
+	ctx context.Context, id uuid.UUID, operation string, locked LockedConversation,
+) (Result, error) {
+	// Save only the already-revoked state and lookup reference before mutation.
+	// A timeout or failed final Save must leave enough information to query the core.
+	checkpoint := locked.Snapshot()
+	checkpoint.Uncertain = &UncertainConfirmation{ID: id}
+	if err := locked.Save(ctx, checkpoint); err != nil {
+		return Result{}, err
+	}
+
+	f.state.Uncertain = checkpoint.Uncertain
+
 	row, err := f.core.Confirm(ctx, f.principal, id)
 	if err != nil {
 		return Result{}, err
 	}
 
-	f.state.Proposal = nil
+	return f.confirmedResult(row, id, operation), nil
+}
+
+func (f *conversationFlow) confirmedResult(row domain.Appointment, id uuid.UUID, operation string) Result {
+	f.state.Proposal, f.state.Uncertain = nil, nil
 	f.state.Completed = &CompletedAction{ID: id}
 
 	rows := []Appointment{{
@@ -173,5 +191,5 @@ func (f *conversationFlow) confirmBooking(ctx context.Context, id uuid.UUID, ope
 		message = "Cancelamento confirmado.\n"
 	}
 
-	return Result{Message: message + tools.RenderAppointments(rows), Appointments: rows}, nil
+	return Result{Message: message + tools.RenderAppointments(rows), Appointments: rows}
 }

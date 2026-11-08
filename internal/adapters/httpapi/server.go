@@ -32,6 +32,8 @@ func errorStatus(err error) (int, string, string) {
 		status := 409
 
 		switch business.Code {
+		case "INTERNAL_ERROR":
+			status = 500
 		case "INVALID_INPUT":
 			status = 400
 		case "UNAUTHORIZED":
@@ -75,8 +77,14 @@ func New(
 		fiber.Config{Immutable: true, BodyLimit: 64 * 1024, ErrorHandler: func(c fiber.Ctx, err error) error {
 			status, code, message := errorStatus(err)
 			id, _ := c.Locals(requestIDKey).(string)
+			detail := errorDetail{Code: code, Message: message, RequestID: id}
 
-			return c.Status(status).JSON(errorDTO{Error: errorDetail{Code: code, Message: message, RequestID: id}})
+			var turn *agent.TurnError
+			if errors.As(err, &turn) {
+				detail.ConversationID = turn.ConversationID.String()
+			}
+
+			return c.Status(status).JSON(errorDTO{Error: detail})
 		}},
 	)
 	app.Use(func(c fiber.Ctx) error {

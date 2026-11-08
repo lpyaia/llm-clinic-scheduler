@@ -34,8 +34,10 @@ após falha; agora falhas de interpretação também a consomem. Entrada inváli
 não iniciam um turno e não revogam a proposta em processamento.
 
 Reenvios bem-sucedidos usam somente a referência à ação concluída, inclusive após sua validade original.
-Revogar essa referência nunca cancela o agendamento. Se o núcleo concluir e a gravação final falhar,
-o agendamento permanece; consulte a listagem para verificar o resultado. A recuperação ampliada pertence a #14.
+Revogar essa referência nunca cancela o agendamento. A implementação de #14 salva uma referência de consulta
+antes de confirmar: se o resultado ficar incerto, a próxima mensagem consulta a ação antes de interpretar outro
+pedido. Essa referência não concede autoridade para repetir a mutação. Sucesso recuperado vem do resultado
+armazenado; uma ação ainda pendente exige nova preparação, resumo e confirmação.
 
 Os testes determinísticos verificam execução e efeitos pela interface pública com modelo simulado.
 A qualidade da interpretação em português com o fornecedor real é avaliada separadamente em #40.
