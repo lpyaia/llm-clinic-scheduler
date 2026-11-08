@@ -31,6 +31,9 @@ var rescheduleAppointmentSchema string
 //go:embed schemas/cancel_appointment.json
 var cancelAppointmentSchema string
 
+//go:embed schemas/offer_human_contact.json
+var offerHumanContactSchema string
+
 var toolSchemas = tools.Schemas{
 	ListAppointments:      json.RawMessage(listSchema),
 	AppointmentAnswer:     json.RawMessage(appointmentAnswerSchema),
@@ -40,4 +43,5 @@ var toolSchemas = tools.Schemas{
 	SelectAppointment:     json.RawMessage(selectAppointmentSchema),
 	RescheduleAppointment: json.RawMessage(rescheduleAppointmentSchema),
 	CancelAppointment:     json.RawMessage(cancelAppointmentSchema),
+	OfferHumanContact:     json.RawMessage(offerHumanContactSchema),
 }

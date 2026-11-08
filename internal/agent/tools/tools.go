@@ -27,6 +27,8 @@ type Input struct {
 	Selection    contract.BookingSelection
 	Offered      []contract.Slot
 	Rescheduling *contract.Rescheduling
+	// ClinicContact comes from operator configuration, never model arguments.
+	ClinicContact string
 }
 
 // Schemas are embedded by the agent composition root, independent of execution.
@@ -39,6 +41,7 @@ type Schemas struct {
 	SelectAppointment     json.RawMessage
 	RescheduleAppointment json.RawMessage
 	CancelAppointment     json.RawMessage
+	OfferHumanContact     json.RawMessage
 }
 
 // New supplies the supported tools; the flow limits their availability per turn.
@@ -51,6 +54,7 @@ func New(core *application.Service, schemas Schemas) []Executor {
 		&cancellationPreparation{core: core, schema: schemas.CancelAppointment},
 		&reschedulingPreparation{core: core, schema: schemas.RescheduleAppointment},
 		&proposalResponse{schema: schemas.RespondToProposal},
+		&humanContact{schema: schemas.OfferHumanContact},
 	}
 }
 

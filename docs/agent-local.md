@@ -467,6 +467,36 @@ falha de consulta, rollback, gravação interrompida, cancelamento após commit,
 mudança concorrente, limite semanal e recuperação com nova confirmação. A memória
 continua local ao processo; persistência e coordenação entre instâncias permanecem em #26 e #27.
 
+## Recusa médica e contato humano (#15)
+
+Defina `CLINIC_CONTACT` na `.env` ou no ambiente do processo com o canal oficial da equipe.
+O servidor injeta o valor em `Agent.ClinicContact` antes de atender requisições; configure esse campo
+antes de usar o agente em outras integrações. Espaços nas extremidades são removidos.
+Sem configuração, a resposta oferece contato com a equipe e informa que o canal não está configurado.
+Não há número, endereço ou URL padrão. O contato não é um argumento da ferramenta nem é escolhido pelo modelo.
+
+`offer_human_contact` aceita somente `reason`: `medical_advice`, `out_of_scope` ou `not_understood`.
+A aplicação constrói a recusa e a orientação em português, sem aceitar texto livre do modelo.
+A ferramenta não consulta o catálogo, prepara ações ou confirma propostas. Apenas oferece o canal;
+não abre uma sessão de atendimento humano nem envia mensagens à equipe.
+
+A política enviada ao modelo recusa diagnóstico, interpretação de sintomas, tratamentos, medicamentos,
+doses e recomendação de especialidade por sintomas. Decisões clínicas também usam `medical_advice`.
+Pedidos para ignorar as instruções não alteram as ferramentas disponíveis nem suas validações.
+Uma especialidade explicitamente escolhida continua permitindo busca, mesmo se o paciente mencionar sintomas.
+Falta de médico, data ou categoria em um pedido administrativo compreendido usa o esclarecimento normal.
+
+O fluxo mantém o acesso exclusivo durante a interpretação e a resposta. Uma proposta anterior tem sua
+autoridade revogada e salva antes do modelo; escolher contato humano descarta o vínculo do turno.
+O histórico registra a orientação somente após a resposta válida. Uma confirmação posterior exige nova proposta.
+Uma resposta inválida segue a recuperação existente, sem expor conselhos ou contatos produzidos pelo modelo.
+Referências de confirmação com resultado incerto continuam sendo consultadas antes de interpretar novos pedidos.
+
+Os testes de `internal/agent/medical_scope_test.go` exercitam as interfaces públicas do agente com modelo
+simulado; o teste HTTP verifica o contato configurado, a recusa e a consulta administrativa na mesma conversa.
+Eles verificam protocolo, renderização e efeitos, e não medem a capacidade do modelo de classificar linguagem natural.
+Os mesmos [cenários em português](evals/README.md) ficam disponíveis para avaliação posterior com modelo real.
+
 ## Verificação
 
 ```powershell

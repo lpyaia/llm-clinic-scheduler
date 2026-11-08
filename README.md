@@ -319,6 +319,13 @@ O adapter OpenAI é opcional: configure `OPENAI_API_KEY` para habilitá-lo e
 Structured Outputs (padrão `gpt-4.1-mini`). Sem chave, apenas essa rota retorna
 `503 AGENT_UNAVAILABLE`. Os testes usam modelos simulados e servidor HTTP local.
 
+Configure `CLINIC_CONTACT` com o canal oficial da equipe da clínica (telefone, WhatsApp, e-mail ou URL).
+Pedidos de aconselhamento médico, decisões clínicas, solicitações fora do escopo e não compreendidas
+recebem uma orientação em português para procurar a equipe. O contato vem somente dessa configuração;
+se estiver vazio, o assistente informa que o canal não está configurado, sem inventar um número ou endereço.
+Especialidades escolhidas explicitamente pelo paciente continuam disponíveis para busca administrativa.
+Veja os [cenários de avaliação em português](docs/evals/README.md).
+
 1. Agente em português, abstração de LLM, tool calling, loop limitado e estado em memória. Tools reutilizam os casos de
    uso; confirmações ficam ligadas ao ID da ação pendente.
 2. Traces, métricas de tokens/latência/custo e avaliações com dataset manual e relógio controlado.

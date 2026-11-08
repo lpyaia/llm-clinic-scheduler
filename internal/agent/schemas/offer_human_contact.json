@@ -1,0 +1,17 @@
+{
+  "type": "object",
+  "properties": {
+    "reason": {
+      "type": "string",
+      "enum": [
+        "medical_advice",
+        "out_of_scope",
+        "not_understood"
+      ]
+    }
+  },
+  "required": [
+    "reason"
+  ],
+  "additionalProperties": false
+}

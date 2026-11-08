@@ -97,6 +97,7 @@ func run(logger *slog.Logger) error {
 	if key := os.Getenv("OPENAI_API_KEY"); key != "" {
 		model := &openai.Client{APIKey: key, Model: env("OPENAI_MODEL", "gpt-4.1-mini")}
 		assistant = agent.New(service, model)
+		assistant.ClinicContact = os.Getenv("CLINIC_CONTACT")
 	}
 
 	app := httpapi.New(service, store.Ping, logger, timeoutConfig.HTTPRequest, assistant)
