@@ -43,8 +43,12 @@ paths:
         aguarde a resposta, leia o resumo e reenvie a mensagem.
         Expiração revoga a referência e retorna ACTION_EXPIRED (410), exigindo nova preparação.
         Reenvios usam a referência concluída e retornam o mesmo agendamento, mesmo após a validade original.
-        Revogar autoridade nunca cancela agendamento concluído. Se a gravação final falhar após confirmar,
-        consulte a listagem para verificar o resultado.
+        Revogar autoridade nunca cancela agendamento concluído. Falhas retornam orientação em português
+        e error.conversation_id quando o turno já possui estado salvo. Reutilize esse ID para retomar.
+        Antes de confirmar, o fluxo salva uma referência de consulta. Se houver resultado incerto,
+        a próxima mensagem consulta a ação antes de interpretar outro pedido, sem repetir a mutação.
+        Sucesso recuperado apresenta o resultado real; ação ainda pendente retorna ACTION_NOT_COMPLETED
+        e exige nova preparação, resumo e confirmação. Falha de consulta mantém a referência para nova consulta.
         Limite de quatro chamadas ao modelo. Requer OPENAI_API_KEY no servidor.
       requestBody:
         required: true
@@ -347,6 +351,10 @@ components:
             code: { type: string, example: SLOT_UNAVAILABLE }
             message: { type: string, example: Este horário não está mais disponível. }
             request_id: { type: string, format: uuid }
+            conversation_id:
+              type: string
+              format: uuid
+              description: Conversa salva para retomar após falha no processamento do turno.
     Patient:
       type: object
       required: [id, full_name, phone]

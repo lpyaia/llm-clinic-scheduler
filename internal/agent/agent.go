@@ -142,32 +142,61 @@ func (a *Agent) ReplyConversation(
 	defer locked.Release()
 
 	flow := &conversationFlow{core: a.core, principal: principal, state: locked.Snapshot()}
-	if flow.bindProposal() {
+	if createConversation {
 		if err := locked.Save(ctx, flow.state); err != nil {
 			return Result{}, err
 		}
 	}
 
-	if err := flow.validateBinding(ctx); err != nil {
-		return Result{}, err
+	if flow.state.Uncertain != nil {
+		out, err := flow.recoverConfirmation(ctx)
+		if err == nil {
+			flow.rememberExchange(message, out.Message)
+		}
+
+		if flow.state.Uncertain == nil {
+			if saveErr := locked.Save(ctx, flow.state); saveErr != nil {
+				return Result{}, turnFailure(id, saveErr)
+			}
+		}
+
+		if err != nil {
+			return Result{}, turnFailure(id, err)
+		}
+
+		out.ConversationID = id
+
+		return out, nil
 	}
 
-	out, err := a.replyWithModel(ctx, message, flow)
+	if flow.bindProposal() {
+		if err := locked.Save(ctx, flow.state); err != nil {
+			return Result{}, turnFailure(id, err)
+		}
+	}
+
+	if err := flow.validateBinding(ctx); err != nil {
+		return Result{}, failTurn(ctx, locked, id, err)
+	}
+
+	out, err := a.replyWithModel(ctx, message, flow, locked)
 	if err != nil {
-		return Result{}, err
+		return Result{}, failTurn(ctx, locked, id, err)
 	}
 
 	out.ConversationID = id
 	flow.rememberExchange(message, out.Message)
 
 	if err := locked.Save(ctx, flow.state); err != nil {
-		return Result{}, err
+		return Result{}, turnFailure(id, err)
 	}
 
 	return out, nil
 }
 
-func (a *Agent) replyWithModel(ctx context.Context, message string, flow *conversationFlow) (Result, error) {
+func (a *Agent) replyWithModel(
+	ctx context.Context, message string, flow *conversationFlow, locked LockedConversation,
+) (Result, error) {
 	in, err := flow.request(message)
 	if err != nil {
 		return Result{}, err
@@ -218,6 +247,8 @@ func (a *Agent) replyWithModel(ctx context.Context, message string, flow *conver
 		seenCalls[call.ID] = true
 
 		switch out := outcome.(type) {
+		case tools.ProposalResponse:
+			return flow.respondToProposal(ctx, out.Decision, locked)
 		case tools.ReturnToModel:
 			finalize = out.Finalize
 			in.Tools = flow.availableTools()

@@ -15,13 +15,15 @@ import (
 // Conversation is owned by the conversational flow. Offered slots, an incomplete
 // selection, a presented proposal and a completed action have separate lifecycles.
 type Conversation struct {
-	Intent       string
-	Search       SearchPreferences
-	History      []Message
-	Offered      []Slot
-	Selection    BookingSelection
-	Proposal     *PendingAction
-	Completed    *CompletedAction
+	Intent    string
+	Search    SearchPreferences
+	History   []Message
+	Offered   []Slot
+	Selection BookingSelection
+	Proposal  *PendingAction
+	Completed *CompletedAction
+	// Uncertain is a lookup reference, never authority to repeat a confirmation.
+	Uncertain    *UncertainConfirmation
 	Revision     uint64
 	Rescheduling *contract.Rescheduling
 	Candidates   []Appointment
@@ -29,6 +31,12 @@ type Conversation struct {
 
 // CompletedAction retains only the core's idempotency reference, never a proposal.
 type CompletedAction struct {
+	ID uuid.UUID
+}
+
+// UncertainConfirmation records an attempt whose result must be queried before
+// interpreting another request. It never grants permission to call Confirm.
+type UncertainConfirmation struct {
 	ID uuid.UUID
 }
 
@@ -57,6 +65,11 @@ func (c Conversation) clone() Conversation {
 	if c.Completed != nil {
 		completed := *c.Completed
 		c.Completed = &completed
+	}
+
+	if c.Uncertain != nil {
+		uncertain := *c.Uncertain
+		c.Uncertain = &uncertain
 	}
 
 	return c
@@ -174,11 +187,6 @@ func (f *conversationFlow) executeTool(ctx context.Context, call ToolCall) (tool
 	}, call.Arguments)
 	if err != nil {
 		return nil, err
-	}
-
-	if decision, ok := outcome.(tools.ProposalResponse); ok {
-		result, err := f.respondToProposal(ctx, decision.Decision)
-		return tools.ReplyToPatient{Result: result}, err
 	}
 
 	if reply, ok := outcome.(tools.ReplyToPatient); ok {

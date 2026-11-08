@@ -141,9 +141,18 @@ func (s *slotSearch) findSlots(
 		Until:    found.Until,
 		Expanded: found.Expanded,
 	}
+	for _, row := range found.Slots {
+		if original != nil && row.ID == original.SlotID {
+			continue
+		}
+
+		availability.Slots = append(availability.Slots, contract.Slot{
+			ID: row.ID, DoctorName: row.DoctorName, StartsAt: row.StartsAt.In(s.core.Location),
+		})
+	}
 
 	var message strings.Builder
-	if len(found.Slots) == 0 {
+	if len(availability.Slots) == 0 {
 		message.WriteString("Não encontrei horários disponíveis")
 	} else {
 		message.WriteString("Horários disponíveis")
@@ -160,14 +169,16 @@ func (s *slotSearch) findSlots(
 		message.WriteString(" Busca ampliada automaticamente.")
 	}
 
-	for _, row := range found.Slots {
-		if original != nil && row.ID == original.SlotID {
-			continue
-		}
-
-		slot := contract.Slot{ID: row.ID, DoctorName: row.DoctorName, StartsAt: row.StartsAt.In(s.core.Location)}
-		availability.Slots = append(availability.Slots, slot)
+	for _, slot := range availability.Slots {
 		fmt.Fprintf(&message, "\n- %s com %s.", slot.StartsAt.Format("02/01/2006 às 15:04 -07:00"), slot.DoctorName)
+	}
+
+	if len(availability.Slots) == 0 {
+		message.WriteString(" Deseja mudar os critérios de data, período ou médico para uma nova busca?")
+
+		if original != nil {
+			message.WriteString(" Remarcar mantém o mesmo médico; trocar de médico exige um novo agendamento.")
+		}
 	}
 
 	return ReplyToPatient{Search: &preferences, Result: contract.Result{
