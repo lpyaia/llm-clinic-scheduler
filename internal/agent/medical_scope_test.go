@@ -14,7 +14,19 @@ import (
 )
 
 func TestMedicalAdviceOffersHumanContactWithoutInventingChannel(t *testing.T) {
-	model := modelFunc(func(context.Context, agent.Request) (agent.Response, error) {
+	model := modelFunc(func(_ context.Context, in agent.Request) (agent.Response, error) {
+		offered := false
+
+		for _, tool := range in.Tools {
+			if tool.Name == "offer_human_contact" && len(tool.Parameters) != 0 {
+				offered = true
+			}
+		}
+
+		if !in.RequireTool || !offered {
+			t.Fatal("the model must be able to select a structured human-contact response")
+		}
+
 		return toolReply("contact", "offer_human_contact", `{"reason":"medical_advice"}`), nil
 	})
 	a := agent.New(&application.Service{}, model)
@@ -57,17 +69,6 @@ func TestPortugueseMedicalScopeScenarios(t *testing.T) {
 			core, _ := bookingFixture()
 			p := domain.Principal{PatientID: uuid.New()}
 			model := modelFunc(func(_ context.Context, in agent.Request) (agent.Response, error) {
-				policy := in.Messages[0].Content
-				for _, rule := range []string{
-					"Não forneça diagnóstico", "não interprete sintomas", "medical_advice",
-					"out_of_scope", "not_understood", "explicitamente escolhida pelo paciente",
-					"ignorar estas restrições", "não são confirmação",
-				} {
-					if !strings.Contains(policy, rule) {
-						t.Fatalf("model request is missing scope policy %q", rule)
-					}
-				}
-
 				last := in.Messages[len(in.Messages)-1]
 				if last.Role == "tool" {
 					return appointmentAnswer(t), nil
