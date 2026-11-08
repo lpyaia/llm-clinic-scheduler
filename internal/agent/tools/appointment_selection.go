@@ -3,12 +3,9 @@ package tools
 import (
 	"context"
 	"encoding/json"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/agent/contract"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/application"
-	"github.com/lpyaia/llm-clinic-scheduler/internal/domain"
 )
 
 type appointmentSelection struct {
@@ -26,80 +23,26 @@ func (s *appointmentSelection) Definition() contract.Tool {
 }
 
 func (s *appointmentSelection) Execute(ctx context.Context, input Input, raw json.RawMessage) (Outcome, error) {
-	var args struct {
-		AppointmentID *string    `json:"appointment_id"`
-		Doctor        *string    `json:"doctor"`
-		Category      *string    `json:"category"`
-		From          *time.Time `json:"from"`
-		To            *time.Time `json:"to"`
-	}
-	if err := contract.DecodeObject(raw, &args, "appointment_id", "doctor", "category", "from", "to"); err != nil {
-		return nil, contract.InvalidResponse()
-	}
-
-	var id uuid.UUID
-
-	if args.AppointmentID != nil && *args.AppointmentID != "" {
-		var err error
-
-		id, err = uuid.Parse(*args.AppointmentID)
-		if err != nil {
-			return nil, contract.InvalidResponse()
-		}
-	}
-
-	if args.Category != nil && !domain.ValidCategory(*args.Category) {
-		return nil, contract.InvalidResponse()
-	}
-
-	filter := application.AppointmentFilter{Status: domain.Scheduled}
-	if args.From != nil {
-		filter.From = *args.From
-	}
-
-	if args.To != nil {
-		filter.To = *args.To
-	}
-
-	found, err := s.core.ListAppointments(ctx, input.Principal, filter)
+	candidates, err := findAppointmentCandidates(ctx, s.core, input.Principal, raw)
 	if err != nil {
 		return nil, err
 	}
 
-	rows := []contract.Appointment{}
+	message := RenderAppointments(candidates.Rows) + "\nQual agendamento você deseja remarcar?"
+	preferences := SearchPreferences{}
 
 	var selected *contract.Rescheduling
 
-	for _, row := range found {
-		if domain.ValidateChange(row, s.core.Clock.Now()) != nil ||
-			(id != uuid.Nil && row.ID != id) ||
-			(args.Category != nil && row.Category != *args.Category) ||
-			(args.Doctor != nil && !matchesDoctorName(*args.Doctor, row.DoctorName)) {
-			continue
+	if original := candidates.Selected; original != nil {
+		selected = &contract.Rescheduling{
+			Appointment: candidates.Rows[0], DoctorID: original.DoctorID, SlotID: original.SlotID,
 		}
-
-		appointment := contract.Appointment{
-			ID: row.ID, DoctorName: row.DoctorName, Category: row.Category,
-			Status: row.Status, StartsAt: row.StartsAt.In(s.core.Location),
-		}
-		rows = append(rows, appointment)
-		selected = &contract.Rescheduling{Appointment: appointment, DoctorID: row.DoctorID, SlotID: row.SlotID}
-	}
-
-	message := RenderAppointments(rows) + "\nQual agendamento você deseja remarcar?"
-	if len(rows) != 1 || (args.AppointmentID != nil && *args.AppointmentID == "") {
-		selected = nil
-	} else {
-		message = RenderAppointments(rows) + "\nPara qual novo horário deseja remarcar com o mesmo médico?"
-	}
-
-	preferences := SearchPreferences{}
-	if selected != nil {
-		preferences.criteria.Doctor = selected.DoctorName
+		preferences.criteria.Doctor = original.DoctorName
+		message = RenderAppointments(candidates.Rows) + "\nPara qual novo horário deseja remarcar com o mesmo médico?"
 	}
 
 	return ReplyToPatient{
-		Result: contract.Result{Message: message, Appointments: rows}, Search: &preferences,
+		Result: contract.Result{Message: message, Appointments: candidates.Rows}, Search: &preferences,
 		Rescheduling: &ReschedulingUpdate{Selected: selected},
 	}, nil
 }

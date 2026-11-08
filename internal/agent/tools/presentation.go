@@ -26,8 +26,8 @@ func categoryName(category string) string {
 	return map[string]string{"consultation": "consulta", "exam": "exame", "procedure": "procedimento"}[category]
 }
 
-// Rescheduling actions store no category; presentation uses the verified original's category.
-// Creation and rescheduling share expiry, summary and booking-update construction.
+// Change actions store no category; presentation uses the verified original's category.
+// All operations share expiry, summary and proposal-update construction.
 func proposalReply(
 	action domain.Action, category string, selection contract.BookingSelection, location *time.Location,
 ) ReplyToPatient {
@@ -37,6 +37,10 @@ func proposalReply(
 	question := "Você confirma? Responda sim, confirmo para agendar."
 	if action.Operation == domain.RescheduleAppointment {
 		question = "Você confirma a remarcação?"
+	}
+
+	if action.Operation == domain.CancelAppointment {
+		question = "Você confirma o cancelamento?"
 	}
 
 	result := contract.Result{

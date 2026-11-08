@@ -38,6 +38,7 @@ type Schemas struct {
 	RespondToProposal     json.RawMessage
 	SelectAppointment     json.RawMessage
 	RescheduleAppointment json.RawMessage
+	CancelAppointment     json.RawMessage
 }
 
 // New supplies the supported tools; the flow limits their availability per turn.
@@ -47,6 +48,7 @@ func New(core *application.Service, schemas Schemas) []Executor {
 		&slotSearch{core: core, schema: schemas},
 		&bookingPreparation{core: core, schema: schemas},
 		&appointmentSelection{core: core, schema: schemas.SelectAppointment},
+		&cancellationPreparation{core: core, schema: schemas.CancelAppointment},
 		&reschedulingPreparation{core: core, schema: schemas.RescheduleAppointment},
 		&proposalResponse{schema: schemas.RespondToProposal},
 	}

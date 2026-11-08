@@ -14,7 +14,7 @@ paths:
   /v1/agent/messages:
     post:
       operationId: querySchedulingConversationally
-      summary: Consultar, buscar horários e agendar com confirmação em português
+      summary: Consultar, buscar horários, agendar, remarcar e cancelar em português
       description: >-
         Resolve o paciente pela sessão. Sem conversation_id, inicia uma conversa;
         repita o ID retornado para preservar histórico e preferências de busca.
@@ -23,6 +23,10 @@ paths:
         O modelo chama list_appointments, find_available_slots ou create_appointment; nomes são
         resolvidos pelo catálogo e datas relativas usam o relógio e fuso da clínica.
         A resposta em português é montada pelo servidor a partir dos resultados reais.
+        Remarcação identifica o original com select_appointment e prepara um destino apresentado
+        com reschedule_appointment. Cancelamento usa cancel_appointment com os filtros do original;
+        vários candidatos próprios exigem esclarecimento, sem preparar uma ação.
+        Apenas atendimentos próprios, ativos e futuros podem ser alterados. O núcleo revalida na confirmação.
         Criar prepara uma ação sem reservar; a resposta pending_action apresenta resumo,
         categoria e validade. Uma mensagem posterior como "sim, confirmo" confirma somente
         a proposta desta conversa. O modelo interpreta a mensagem atual por respond_to_proposal
@@ -33,6 +37,8 @@ paths:
         falha, resposta inválida ou cancelamento na interpretação também revogam a autoridade;
         preparar e confirmar no mesmo turno é proibido, inclusive com chamadas adicionais ao modelo;
         alterações exigem novo resumo e confirmação. Repetir a confirmação é idempotente.
+        Remarcar e cancelar também exigem resumo e mensagem posterior de confirmação;
+        o resultado e o status apresentados vêm do núcleo. Repetir não altera outro atendimento.
         Toda mensagem durante outra em execução retorna INVALID_INPUT (400), antes da interpretação;
         aguarde a resposta, leia o resumo e reenvie a mensagem.
         Expiração revoga a referência e retorna ACTION_EXPIRED (410), exigindo nova preparação.

@@ -51,7 +51,8 @@ func (f *conversationFlow) validateBinding(ctx context.Context) error {
 	}
 
 	if action.PatientID != f.binding.PatientID ||
-		(action.Operation != domain.CreateAppointment && action.Operation != domain.RescheduleAppointment) {
+		(action.Operation != domain.CreateAppointment && action.Operation != domain.RescheduleAppointment &&
+			action.Operation != domain.CancelAppointment) {
 		return domain.ErrNotFound
 	}
 
@@ -72,7 +73,7 @@ func (f *conversationFlow) validateBinding(ctx context.Context) error {
 	}
 
 	category := action.Category
-	if action.Operation == domain.RescheduleAppointment {
+	if action.Operation != domain.CreateAppointment {
 		if action.Result != nil {
 			category = action.Result.Category
 		} else if f.binding.Proposal != nil {
@@ -103,12 +104,31 @@ func (f *conversationFlow) respondToProposal(ctx context.Context, decision strin
 	case "reject":
 		f.state.Selection = BookingSelection{}
 
+		if bound.Operation == domain.CancelAppointment {
+			if bound.Completed {
+				return tools.Clarification("Referência descartada. O cancelamento já realizado foi mantido."), nil
+			}
+
+			return tools.Clarification("Cancelamento descartado. O agendamento foi mantido."), nil
+		}
+
 		if bound.Operation == domain.RescheduleAppointment && !bound.Completed {
 			return tools.Clarification("Remarcação descartada. O agendamento original foi mantido."), nil
 		}
 
 		return tools.Clarification("Proposta descartada. Nenhum novo agendamento foi realizado."), nil
 	case "clarify":
+		if bound.Operation == domain.CancelAppointment {
+			if bound.Completed {
+				return tools.Clarification("O cancelamento já foi realizado. Qual é sua dúvida?"), nil
+			}
+
+			return tools.Clarification(
+				"O cancelamento não foi confirmado. O agendamento foi mantido. " +
+					"Qual atendimento deseja cancelar? Leia o novo resumo antes de confirmar.",
+			), nil
+		}
+
 		if bound.Operation == domain.RescheduleAppointment && !bound.Completed {
 			return tools.Clarification(
 				"A remarcação não foi confirmada. O agendamento original foi mantido. " +
@@ -146,6 +166,11 @@ func (f *conversationFlow) confirmBooking(ctx context.Context, id uuid.UUID, ope
 			Appointment: rows[0], DoctorID: row.DoctorID, SlotID: row.SlotID,
 		}
 		message = "Remarcação confirmada.\n"
+	}
+
+	if operation == domain.CancelAppointment {
+		f.state.Rescheduling = nil
+		message = "Cancelamento confirmado.\n"
 	}
 
 	return Result{Message: message + tools.RenderAppointments(rows), Appointments: rows}, nil

@@ -300,12 +300,14 @@ domínio verificam também a passagem entre domingo e segunda-feira no fuso da c
 
 ## Próximas fases
 
-Os primeiros fluxos da V2 já estão disponíveis: [consultas, busca e agendamento conversacional](docs/agent-local.md).
+Os fluxos da V2 já incluem [consulta, busca, agendamento, remarcação e cancelamento por conversa](docs/agent-local.md).
 `POST /v1/agent/messages` recebe uma mensagem em português e usa a sessão existente.
 Retorne o `conversation_id` recebido para preservar preferências e histórico em memória.
 Buscas resolvem nomes pelo catálogo, convertem datas relativas no fuso da clínica e
 reutilizam a disponibilidade determinística; nomes ambíguos geram esclarecimento.
 Escolher um horário e categoria prepara uma proposta com resumo e validade, sem reservar.
+Remarcar ou cancelar identifica um atendimento próprio, futuro e ativo; vários candidatos exigem escolha.
+O resumo apresenta o atendimento e a ação antes de pedir confirmação.
 Uma confirmação explícita posterior, como “sim, confirmo”, executa apenas a proposta
 daquela conversa e paciente; o modelo interpreta a mensagem atual no contexto da proposta,
 sem listas fixas de frases. Repetir a confirmação retorna o mesmo agendamento. Perguntas,

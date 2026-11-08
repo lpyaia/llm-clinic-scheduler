@@ -1,0 +1,53 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "appointment_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "ID próprio a cancelar identificado no contexto; null usa filtros, vazio exige esclarecimento."
+    },
+    "doctor": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Nome do médico do atendimento a cancelar, se informado."
+    },
+    "category": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "consultation",
+        "exam",
+        "procedure",
+        null
+      ]
+    },
+    "from": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Início inclusivo RFC3339 para identificar o atendimento a cancelar."
+    },
+    "to": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Fim exclusivo RFC3339 para identificar o atendimento a cancelar."
+    }
+  },
+  "required": [
+    "appointment_id",
+    "doctor",
+    "category",
+    "from",
+    "to"
+  ]
+}
