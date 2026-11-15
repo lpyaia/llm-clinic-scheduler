@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lpyaia/llm-clinic-scheduler/internal/agent"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/evals"
 )
 
@@ -135,16 +136,7 @@ func TestReportSeparatesModelMisbehaviorFromProviderFailure(t *testing.T) {
 }
 
 func TestBookingEvaluationDetectsForbiddenEffects(t *testing.T) {
-	file, err := os.Open("../../docs/evals/conversations.pt-BR.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = file.Close() }()
-
-	dataset, err := evals.Load(file)
-	if err != nil {
-		t.Fatal(err)
-	}
+	dataset := conversationDataset(t)
 
 	// The simulated model confirms, but this variant permits no booking effect.
 	booking := &dataset.Scenarios[2]
@@ -167,16 +159,7 @@ func TestBookingEvaluationDetectsForbiddenEffects(t *testing.T) {
 }
 
 func TestRecordedBookingReplaysWithTheSameBehaviorAndPrompts(t *testing.T) {
-	file, err := os.Open("../../docs/evals/conversations.pt-BR.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = file.Close() }()
-
-	dataset, err := evals.Load(file)
-	if err != nil {
-		t.Fatal(err)
-	}
+	dataset := conversationDataset(t)
 
 	first, err := evals.Run(context.Background(), dataset, evals.Options{Mode: "scripted"})
 	if err != nil {
@@ -214,16 +197,7 @@ func TestRecordedBookingReplaysWithTheSameBehaviorAndPrompts(t *testing.T) {
 }
 
 func TestScenarioClockExpiresAProposalBeforeCallingTheModel(t *testing.T) {
-	file, err := os.Open("../../docs/evals/conversations.pt-BR.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = file.Close() }()
-
-	dataset, err := evals.Load(file)
-	if err != nil {
-		t.Fatal(err)
-	}
+	dataset := conversationDataset(t)
 
 	dataset.Scenarios = dataset.Scenarios[2:]
 	scenario := &dataset.Scenarios[0]
@@ -232,6 +206,18 @@ func TestScenarioClockExpiresAProposalBeforeCallingTheModel(t *testing.T) {
 		Message: "Confirmo", Advance: "11m",
 		Expect: evals.Expectations{Tools: []evals.ToolCall{}, AllowedEffects: []string{}, ErrorCode: "ACTION_EXPIRED"},
 	}
+	scenario.Turns = append(scenario.Turns, evals.Turn{
+		Message: "Quero falar com a equipe",
+		Responses: []evals.Completion{{ToolCalls: []evals.ToolCall{{
+			ID: "contact", Name: "offer_human_contact", Arguments: json.RawMessage(`{"reason":"out_of_scope"}`),
+		}}}},
+		Expect: evals.Expectations{
+			Tools: []evals.ToolCall{
+				{Name: "offer_human_contact", Arguments: json.RawMessage(`{"reason":"out_of_scope"}`)},
+			},
+			AllowedEffects: []string{},
+		},
+	})
 
 	report, err := evals.Run(context.Background(), dataset, evals.Options{Mode: "scripted"})
 	if err != nil {
@@ -244,19 +230,14 @@ func TestScenarioClockExpiresAProposalBeforeCallingTheModel(t *testing.T) {
 		t.Fatalf("fixed clock should expire the proposal without booking: totals=%+v error=%s",
 			report.Totals, turn.Error)
 	}
+
+	if len(report.Scenarios[0].Turns) != 4 || len(report.Scenarios[0].Turns[3].Calls) != 1 {
+		t.Fatal("an expected business error must not silently skip the rest of the scenario")
+	}
 }
 
 func TestEvaluationRejectsWrongToolArguments(t *testing.T) {
-	file, err := os.Open("../../docs/evals/conversations.pt-BR.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = file.Close() }()
-
-	dataset, err := evals.Load(file)
-	if err != nil {
-		t.Fatal(err)
-	}
+	dataset := conversationDataset(t)
 
 	dataset.Scenarios = dataset.Scenarios[2:]
 	dataset.Scenarios[0].Turns = dataset.Scenarios[0].Turns[:1]
@@ -269,5 +250,61 @@ func TestEvaluationRejectsWrongToolArguments(t *testing.T) {
 
 	if !strings.Contains(strings.Join(report.Scenarios[0].Turns[0].Failures, "\n"), "Beatriz") {
 		t.Fatal("report must identify the mismatching expected argument")
+	}
+}
+
+type modelFunc func(context.Context, agent.Request) (agent.Response, error)
+
+func conversationDataset(t *testing.T) evals.Dataset {
+	t.Helper()
+
+	data, err := os.ReadFile("../../docs/evals/conversations.pt-BR.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dataset, err := evals.Load(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return dataset
+}
+
+func (model modelFunc) Complete(ctx context.Context, request agent.Request) (agent.Response, error) {
+	return model(ctx, request)
+}
+
+func TestRecordedProviderInterruptionsKeepTheAgentsRecoveryGuidance(t *testing.T) {
+	for _, interruption := range []error{context.Canceled, context.DeadlineExceeded} {
+		t.Run(interruption.Error(), func(t *testing.T) {
+			dataset := conversationDataset(t)
+			dataset.Scenarios = dataset.Scenarios[:1]
+			model := modelFunc(func(context.Context, agent.Request) (agent.Response, error) {
+				return agent.Response{}, interruption
+			})
+
+			report, err := evals.Run(context.Background(), dataset, evals.Options{
+				Mode: "real", Model: model, Configuration: evals.Configuration{Provider: "test", Model: "interrupted"},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if report.Totals.Errors != 1 || !strings.Contains(report.Scenarios[0].Turns[0].Error, "interrompido") {
+				t.Fatalf("provider interruption must retain agent guidance: %s", report.Scenarios[0].Turns[0].Error)
+			}
+
+			replayed, err := evals.Run(context.Background(), dataset, evals.Options{Mode: "replay", Recording: &report})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			before, _ := json.Marshal(report.Scenarios)
+			after, _ := json.Marshal(replayed.Scenarios)
+			if !bytes.Equal(before, after) {
+				t.Fatal("recorded cancellation/deadline must retain error identity during replay")
+			}
+		})
 	}
 }

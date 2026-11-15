@@ -124,6 +124,11 @@ func runScenario(ctx context.Context, scenario Scenario, options Options, record
 			id = out.ConversationID
 		}
 
+		var turnErr *agent.TurnError
+		if errors.As(err, &turnErr) {
+			id = turnErr.ConversationID
+		}
+
 		after, listErr := core.ListAppointments(ctx, principal, application.AppointmentFilter{})
 		record := TurnReport{
 			Message: turn.Message, Now: controlledClock.now, Expected: turn.Expect,
@@ -156,7 +161,7 @@ func runScenario(ctx context.Context, scenario Scenario, options Options, record
 		}
 
 		result.Turns = append(result.Turns, record)
-		if err != nil || record.Error != "" {
+		if record.Error != "" || (err != nil && record.ErrorCode != turn.Expect.ErrorCode) {
 			break
 		}
 	}
@@ -182,6 +187,8 @@ func (m *observedModel) Complete(ctx context.Context, request agent.Request) (ag
 
 	response := Completion{Error: "scripted model responses exhausted"}
 
+	var originalErr error
+
 	switch m.mode {
 	case "scripted":
 		if len(m.responses) > 0 {
@@ -189,6 +196,8 @@ func (m *observedModel) Complete(ctx context.Context, request agent.Request) (ag
 		}
 	case "real":
 		out, modelErr := m.delegate.Complete(ctx, request)
+		originalErr = modelErr
+
 		response = Completion{Content: out.Content, Usage: out.Usage}
 		for _, call := range out.ToolCalls {
 			response.ToolCalls = append(
@@ -199,6 +208,11 @@ func (m *observedModel) Complete(ctx context.Context, request agent.Request) (ag
 
 		if modelErr != nil {
 			response.Error, response.ErrorCode = modelErr.Error(), domain.ErrorCode(modelErr)
+			if errors.Is(modelErr, context.Canceled) {
+				response.ErrorKind = "canceled"
+			} else if errors.Is(modelErr, context.DeadlineExceeded) {
+				response.ErrorKind = "deadline_exceeded"
+			}
 		}
 	case "replay":
 		response = Completion{Error: "recorded model responses exhausted"}
@@ -233,6 +247,17 @@ func (m *observedModel) Complete(ctx context.Context, request agent.Request) (ag
 	}
 
 	if response.Error != "" {
+		if originalErr != nil {
+			return out, originalErr
+		}
+
+		switch response.ErrorKind {
+		case "canceled":
+			return out, context.Canceled
+		case "deadline_exceeded":
+			return out, context.DeadlineExceeded
+		}
+
 		if response.ErrorCode != "" {
 			return out, domain.Failure(response.ErrorCode, response.Error)
 		}

@@ -27,8 +27,8 @@ quando precisar dos códigos originais em automações.
 Uma ferramenta desconhecida, argumentos incorretos ou uma resposta incompatível com o contrato são falhas de
 comportamento. Indisponibilidade do fornecedor, respostas gravadas insuficientes, divergência do prompt no replay
 e cancelamento são erros de execução. Um erro de negócio esperado, como `ACTION_EXPIRED`, pode aprovar o cenário.
-O executor verifica os efeitos mesmo quando o turno falha e interrompe o cenário após um erro do agente;
-os demais cenários continuam isoladamente.
+O executor verifica os efeitos mesmo quando o turno falha. Erros de negócio esperados permitem continuar na mesma
+conversa; erros inesperados interrompem o cenário, e os demais cenários continuam isoladamente.
 
 ### Formato do dataset
 
@@ -40,7 +40,8 @@ os demais cenários continuam isoladamente.
 - Cada turno tem `message`, `responses` simuladas e `expect`. `advance`, por exemplo `11m`, avança o relógio antes
   da mensagem. Sem avanço, o tempo permanece fixo, inclusive durante chamadas ao fornecedor real.
 - Uma resposta simulada tem `tool_calls` com `id`, `name` e `arguments`, ou `content` JSON para a resposta estruturada.
-  `error` simula falha do fornecedor; `error_code` preserva um código de domínio em gravações. Respostas extras ou
+  `error` simula falha do fornecedor; `error_code` preserva o código e `error_kind` preserva cancelamento ou deadline
+  em gravações. Respostas extras ou
   insuficientes produzem erro de execução para evitar scripts silenciosamente desatualizados.
 - `expect.tools` é a sequência exata de chamadas. Os argumentos esperados são um subconjunto dos campos reais:
   campos adicionais não relevantes podem existir; valores declarados, inclusive `null`, devem corresponder.

@@ -51,6 +51,7 @@ type Completion struct {
 	Usage     agent.ModelUsage `json:"usage"`
 	Error     string           `json:"error,omitempty"`
 	ErrorCode string           `json:"error_code,omitempty"`
+	ErrorKind string           `json:"error_kind,omitempty"`
 }
 
 type ToolCall struct {
