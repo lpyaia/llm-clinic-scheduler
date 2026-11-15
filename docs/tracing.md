@@ -136,6 +136,9 @@ Cada par `provider`/`model` é único e precisa corresponder exatamente ao model
 Os dois preços são obrigatórios, finitos e não negativos; zero explícito permite modelar um modelo gratuito.
 Uma tabela inválida interrompe a inicialização quando a instrumentação está habilitada.
 O arquivo é carregado ao iniciar o servidor; reinicie para atualizar a tabela.
+O repositório inclui [config/model-prices.json](../config/model-prices.json) para `gpt-6-luna`, com tarifas padrão
+de contexto curto em USD, verificadas em 15/11/2026 na [tabela oficial](https://developers.openai.com/api/docs/pricing).
+Para usá-lo, configure `CLINIC_MODEL_PRICES_FILE=config/model-prices.json` e `OPENAI_MODEL=gpt-6-luna`.
 Sem arquivo ou sem preço para o par, o custo permanece indisponível, mesmo quando o consumo é conhecido.
 
 `estimated_cost.status` usa os mesmos quatro estados de disponibilidade.

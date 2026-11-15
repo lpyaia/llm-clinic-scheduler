@@ -1,0 +1,11 @@
+{
+  "currency": "USD",
+  "rates": [
+    {
+      "provider": "openai",
+      "model": "gpt-6-luna",
+      "input_per_million": 0.1,
+      "output_per_million": 0.5
+    }
+  ]
+}
