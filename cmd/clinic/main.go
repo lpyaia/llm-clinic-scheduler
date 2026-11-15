@@ -18,6 +18,7 @@ import (
 	"github.com/lpyaia/llm-clinic-scheduler/internal/config"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/infrastructure/postgres"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/timeouts"
+	"github.com/lpyaia/llm-clinic-scheduler/internal/trace"
 )
 
 func env(key, fallback string) string {
@@ -98,6 +99,27 @@ func run(logger *slog.Logger) error {
 		model := &openai.Client{APIKey: key, Model: env("OPENAI_MODEL", "gpt-4.1-mini")}
 		assistant = agent.New(service, model)
 		assistant.ClinicContact = os.Getenv("CLINIC_CONTACT")
+
+		if path := os.Getenv("CLINIC_TRACE_FILE"); path != "" {
+			file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+			if err != nil {
+				return errors.New("não foi possível abrir CLINIC_TRACE_FILE; verifique o diretório e as permissões")
+			}
+			defer func() {
+				if err := file.Close(); err != nil {
+					logger.Error("trace_close_failed")
+				}
+
+				if assistant.Traces.Failures() > 0 {
+					logger.Warn("trace_export_failed", "count", assistant.Traces.Failures())
+				}
+			}()
+
+			assistant.Traces = trace.NewJSONL(file, trace.Options{
+				CaptureSyntheticContent: os.Getenv("CLINIC_TRACE_SYNTHETIC") == "true",
+				Secrets:                 []string{key, os.Getenv("DATABASE_URL"), os.Getenv("TEST_DATABASE_URL")},
+			})
+		}
 	}
 
 	app := httpapi.New(service, store.Ping, logger, timeoutConfig.HTTPRequest, assistant)

@@ -499,6 +499,9 @@ Os mesmos [cenários em português](evals/README.md) ficam disponíveis para ava
 
 ## Verificação
 
+Para correlacionar uma requisição HTTP com o modelo, as ferramentas e a resposta final, siga
+[o roteiro de traces locais](tracing.md).
+
 ```powershell
 go test ./internal/agent ./internal/adapters/httpapi ./internal/adapters/openai -count=1
 go test ./...
