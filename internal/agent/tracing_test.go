@@ -218,6 +218,13 @@ func TestTraceRecordsPanicsWithoutChangingTheirPropagation(t *testing.T) {
 			if bytes.Contains(output.Bytes(), []byte("private panic credential")) {
 				t.Fatal("panic diagnostic appeared in trace")
 			}
+
+			m := execution.Metrics
+			if m.ModelCalls != 1 || m.ApplicationErrors != 1 || m.MissingUsageCalls != 1 ||
+				m.UsageStatus != "unavailable" || m.Cost.Amount != nil ||
+				(kind == "tool" && (m.ToolCalls != 1 || m.ToolFailures != 1)) {
+				t.Fatalf("panic lost effort counters or invented usage: %+v", m)
+			}
 		})
 	}
 }
@@ -391,5 +398,86 @@ func TestTraceLocatesModelFailureAfterTool(t *testing.T) {
 
 	if bytes.Contains(output.Bytes(), []byte("private provider diagnostic")) {
 		t.Fatal("trace exposed a raw provider error")
+	}
+}
+
+func TestMetricsIncludeUsageBeforeModelFailureAndFailedTools(t *testing.T) {
+	for _, failure := range []string{"none", "model", "tool"} {
+		t.Run(failure, func(t *testing.T) {
+			var output bytes.Buffer
+
+			now := time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)
+			model := modelFunc(func(_ context.Context, in agent.Request) (agent.Response, error) {
+				now = now.Add(100 * time.Millisecond)
+
+				if in.Messages[len(in.Messages)-1].Role == "tool" {
+					if failure == "model" {
+						return agent.Response{}, errors.New("private credential")
+					}
+
+					return agent.Response{Content: json.RawMessage(`{"appointment_ids":[]}`),
+						Usage: agent.ModelUsage{Provider: "test", Model: "model",
+							Tokens: &agent.TokenUsage{Input: 50, Output: 10}}}, nil
+				}
+
+				args := json.RawMessage(`{}`)
+				if failure == "tool" {
+					args = json.RawMessage(`{"patient_id":"forged"}`)
+				}
+
+				return agent.Response{ToolCalls: []agent.ToolCall{{
+					ID: "query", Name: "list_appointments", Arguments: args,
+				}}, Usage: agent.ModelUsage{Provider: "test", Model: "model",
+					Tokens: &agent.TokenUsage{Input: 100, Output: 20}}}, nil
+			})
+			assistant := agent.New(&application.Service{Repo: repository{}, Location: time.UTC}, model)
+			assistant.Traces = trace.NewJSONL(&output, trace.Options{Now: func() time.Time { return now }})
+
+			_, err := assistant.Reply(
+				context.Background(),
+				domain.Principal{PatientID: uuid.New()},
+				"Meus atendimentos",
+			)
+			if (err != nil) != (failure != "none") {
+				t.Fatalf("unexpected reply error: %v", err)
+			}
+
+			var execution trace.Execution
+			if err := json.Unmarshal(output.Bytes(), &execution); err != nil {
+				t.Fatal(err)
+			}
+
+			m := execution.Metrics
+			calls, failedTools, appErrors, input, outputTokens := 2, 0, 0, int64(150), int64(30)
+			status, missing := "complete", 0
+
+			if failure != "none" {
+				appErrors, input, outputTokens = 1, 100, 20
+			}
+
+			if failure == "tool" {
+				calls, failedTools = 1, 1
+			}
+
+			if failure == "model" {
+				status, missing = "partial", 1
+			}
+
+			if m.ModelCalls != calls || m.ToolCalls != 1 || m.ToolFailures != failedTools ||
+				m.ApplicationErrors != appErrors || m.Steps != len(execution.Steps) ||
+				m.InputTokens == nil || *m.InputTokens != input || m.OutputTokens == nil ||
+				*m.OutputTokens != outputTokens || m.UsageStatus != status || m.MissingUsageCalls != missing {
+				t.Fatalf("lost partial effort/consumption: %+v", m)
+			}
+
+			if m.ModelDurationNS != int64(calls)*100000000 || m.TotalDurationNS != m.ModelDurationNS ||
+				m.Cost.Status != "unavailable" || m.Cost.Amount != nil || m.Cost.MissingPriceCalls != calls {
+				t.Fatalf("incorrect timing or invented price: %+v", m)
+			}
+
+			if failure != "none" && execution.FailureStepID == "" {
+				t.Fatal("failed metrics lost trace correlation")
+			}
+		})
 	}
 }

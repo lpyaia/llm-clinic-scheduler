@@ -86,6 +86,85 @@ Erros de entrada anteriores à aquisição aparecem no resultado da execução, 
 O encerramento após quatro chamadas ao modelo aparece como etapa `limit`, com `AGENT_STEP_LIMIT`.
 Cada etapa possui ID, ordem, início, duração em nanossegundos e resultado. A execução também informa sua duração total.
 
+## Latência, consumo e custo — #17
+
+Cada execução exporta `metrics` no mesmo registro de `trace_id` e `request_id`, inclusive em erros, cancelamento,
+timeout, panic e limite de etapas. Não há labels com mensagens, identidade do paciente ou credenciais.
+As etapas de modelo incluem `model.provider`, `model.model` e `model.tokens`, mesmo sem captura de conteúdo.
+O adapter usa o fornecedor e modelo configurados pelo operador, sem aceitar esses identificadores da resposta do LLM.
+
+| Campo em `metrics` | Significado |
+| --- | --- |
+| `total_duration_ns` | Duração do turno até concluir o trace, antes de serializar e escrever o arquivo. |
+| `model_duration_ns` | Soma das durações das chamadas ao modelo, incluindo chamadas com erro. |
+| `model_calls` | Quantidade de tentativas de chamada ao modelo. |
+| `tool_calls`, `tool_failures` | Tools executadas e quantas terminaram com erro, timeout ou cancelamento. |
+| `application_errors` | 0 para turno concluído com sucesso; 1 para turno com falha, sem duplicar erros das etapas. |
+| `steps` | Todas as etapas do trace, incluindo aquisição, gravações, validação e encerramento por limite. |
+| `input_tokens`, `output_tokens` | Soma do consumo informado; `null` quando nenhuma chamada informou consumo válido. |
+| `missing_usage_calls` | Quantidade de chamadas sem consumo completo, válido e não negativo. |
+| `usage_status` | `complete`, `partial`, `unavailable` ou `not_applicable` quando não houve chamadas ao modelo. |
+| `estimated_cost` | Estimativa na moeda configurada, com estado de disponibilidade e subtotal conhecido. |
+
+Em consumo parcial, as somas representam somente as chamadas com consumo conhecido.
+Consumo explicitamente informado como zero é válido.
+Ausência, `null`, campos incompletos ou inválidos são indisponíveis.
+O consumo reportado continua disponível se a validação da resposta falhar. Erros HTTP ou de transporte sem consumo
+reportado permanecem indisponíveis, mas a tentativa e sua duração continuam contadas.
+O OpenAI adapter usa `prompt_tokens` e `completion_tokens` da resposta de Chat Completions.
+
+Para habilitar a estimativa, crie um arquivo JSON local e defina `CLINIC_MODEL_PRICES_FILE` com seu caminho.
+Os valores abaixo são fictícios e servem apenas para demonstrar o formato;
+consulte a tabela do fornecedor antes de usar.
+Não há preços de fornecedor embutidos no código. Os valores são por milhão de tokens, em uma única moeda:
+
+```json
+{
+  "currency": "USD",
+  "rates": [
+    {
+      "provider": "openai",
+      "model": "modelo-configurado",
+      "input_per_million": 2,
+      "output_per_million": 8
+    }
+  ]
+}
+```
+
+Cada par `provider`/`model` é único e precisa corresponder exatamente ao modelo configurado.
+Os dois preços são obrigatórios, finitos e não negativos; zero explícito permite modelar um modelo gratuito.
+Uma tabela inválida interrompe a inicialização quando a instrumentação está habilitada.
+O arquivo é carregado ao iniciar o servidor; reinicie para atualizar a tabela.
+Sem arquivo ou sem preço para o par, o custo permanece indisponível, mesmo quando o consumo é conhecido.
+
+`estimated_cost.status` usa os mesmos quatro estados de disponibilidade.
+`amount` só recebe um número quando todas as chamadas possuem consumo e preço; nos demais casos é `null`.
+`known_amount` mostra a estimativa das chamadas que possuem ambos, ou `null` se nenhuma puder ser estimada.
+`missing_price_calls` conta chamadas sem preço. Uma execução com consumo parcialmente conhecido mantém o subtotal,
+inclusive quando uma chamada posterior falha. A fórmula é
+`input_tokens / 1000000 * input_per_million + output_tokens / 1000000 * output_per_million` por chamada.
+Esta é uma estimativa com duas tarifas: não distingue cache, descontos ou outras modalidades de cobrança.
+Se números extremos excederem a capacidade dos totais, `usage_overflow=true` marca as somas de tokens
+como indisponíveis, preservando o consumo por chamada. `estimated_cost.overflow=true` mantém apenas
+o subtotal finito estimável, com status parcial ou indisponível. O trace e as contagens continuam exportados.
+
+Com o `$run` selecionado no roteiro anterior, consulte os valores e navegue até cada chamada:
+
+```powershell
+$run | Select-Object trace_id, request_id, outcome
+$run.metrics | ConvertTo-Json -Depth 10
+$run.steps | Where-Object kind -EQ 'model' | Select-Object id, order, outcome, duration_ns, model
+```
+
+Também é possível verificar as durações e custos controlados sem banco ou API externa:
+
+```powershell
+go test ./internal/trace -run 'TestMetrics|TestPricing' -count=1 -v
+go test ./internal/agent -run TestMetrics -count=1 -v
+go test ./internal/adapters/openai -run 'TestProvider.*Usage|TestProviderFailureRetains' -count=1 -v
+```
+
 Para reproduzir falhas sem consumir a API ou usar dados reais, execute os cenários determinísticos:
 
 ```powershell

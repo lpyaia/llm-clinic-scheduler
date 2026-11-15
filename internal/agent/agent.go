@@ -272,6 +272,7 @@ func (a *Agent) replyWithModel(
 
 		modelStep := run.StartStep(trace.Step{Kind: "model"}, in)
 		response, err := a.model.Complete(ctx, in)
+		modelStep.RecordModel(response.Usage)
 		modelStep.End(response, errors.Join(err, ctx.Err()))
 
 		if err != nil {

@@ -101,6 +101,21 @@ func run(logger *slog.Logger) error {
 		assistant.ClinicContact = os.Getenv("CLINIC_CONTACT")
 
 		if path := os.Getenv("CLINIC_TRACE_FILE"); path != "" {
+			var pricing *trace.Pricing
+
+			if pricePath := os.Getenv("CLINIC_MODEL_PRICES_FILE"); pricePath != "" {
+				priceFile, err := os.Open(pricePath)
+				if err != nil {
+					return errors.New("não foi possível abrir CLINIC_MODEL_PRICES_FILE")
+				}
+
+				pricing, err = trace.LoadPricing(priceFile)
+				closeErr := priceFile.Close()
+				if err != nil || closeErr != nil {
+					return errors.New("CLINIC_MODEL_PRICES_FILE inválido; verifique moeda, modelos e preços")
+				}
+			}
+
 			file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 			if err != nil {
 				return errors.New("não foi possível abrir CLINIC_TRACE_FILE; verifique o diretório e as permissões")
@@ -116,6 +131,7 @@ func run(logger *slog.Logger) error {
 			}()
 
 			assistant.Traces = trace.NewJSONL(file, trace.Options{
+				Pricing:                 pricing,
 				CaptureSyntheticContent: os.Getenv("CLINIC_TRACE_SYNTHETIC") == "true",
 				Secrets:                 []string{key, os.Getenv("DATABASE_URL"), os.Getenv("TEST_DATABASE_URL")},
 			})

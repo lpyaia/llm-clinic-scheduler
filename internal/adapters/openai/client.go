@@ -57,8 +57,10 @@ type responseFormat struct {
 }
 
 func (c *Client) Complete(ctx context.Context, in agent.Request) (agent.Response, error) {
+	out := agent.Response{Usage: agent.ModelUsage{Provider: "openai", Model: c.Model}}
+
 	if strings.TrimSpace(c.APIKey) == "" || strings.TrimSpace(c.Model) == "" {
-		return agent.Response{}, errors.New("configure OPENAI_API_KEY e OPENAI_MODEL")
+		return out, errors.New("configure OPENAI_API_KEY e OPENAI_MODEL")
 	}
 
 	var request struct {
@@ -128,7 +130,7 @@ func (c *Client) Complete(ctx context.Context, in agent.Request) (agent.Response
 
 	body, err := json.Marshal(request)
 	if err != nil {
-		return agent.Response{}, err
+		return out, err
 	}
 
 	req, err := http.NewRequestWithContext(
@@ -138,7 +140,7 @@ func (c *Client) Complete(ctx context.Context, in agent.Request) (agent.Response
 		bytes.NewReader(body),
 	)
 	if err != nil {
-		return agent.Response{}, err
+		return out, err
 	}
 
 	req.Header.Set("Authorization", "Bearer "+c.APIKey)
@@ -151,51 +153,57 @@ func (c *Client) Complete(ctx context.Context, in agent.Request) (agent.Response
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return agent.Response{}, err
+		return out, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		// Provider bodies can contain credentials or patient data; retain only the status.
-		return agent.Response{}, fmt.Errorf("model provider HTTP status %d", resp.StatusCode)
+		return out, fmt.Errorf("model provider HTTP status %d", resp.StatusCode)
 	}
 
 	payload, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if err != nil {
-		return agent.Response{}, err
+		return out, err
 	}
 
 	if len(payload) > maxResponseBytes {
-		return agent.Response{}, malformed()
+		return out, malformed()
 	}
 
 	var response struct {
+		Usage   json.RawMessage `json:"usage"`
 		Choices []struct {
 			FinishReason string  `json:"finish_reason"`
 			Message      message `json:"message"`
 		} `json:"choices"`
 	}
-	if json.Unmarshal(payload, &response) != nil || len(response.Choices) != 1 {
-		return agent.Response{}, malformed()
+
+	decodeErr := json.Unmarshal(payload, &response)
+	out.Usage.Tokens = reportedUsage(response.Usage)
+	if decodeErr != nil {
+		return out, malformed()
+	}
+
+	if len(response.Choices) != 1 {
+		return out, malformed()
 	}
 
 	choice := response.Choices[0]
 	if choice.Message.Role != "assistant" || choice.Message.Refusal != nil {
-		return agent.Response{}, malformed()
+		return out, malformed()
 	}
-
-	out := agent.Response{}
 
 	if len(choice.Message.ToolCalls) > 0 {
 		if choice.FinishReason != "tool_calls" ||
 			(choice.Message.Content != nil && strings.TrimSpace(*choice.Message.Content) != "") {
-			return agent.Response{}, malformed()
+			return out, malformed()
 		}
 
 		for _, call := range choice.Message.ToolCalls {
 			if call.Type != "function" || call.ID == "" || call.Function.Name == "" ||
 				!json.Valid([]byte(call.Function.Arguments)) {
-				return agent.Response{}, malformed()
+				return out, malformed()
 			}
 
 			out.ToolCalls = append(
@@ -213,7 +221,7 @@ func (c *Client) Complete(ctx context.Context, in agent.Request) (agent.Response
 
 	if in.RequireTool || choice.FinishReason != "stop" || choice.Message.Content == nil ||
 		!json.Valid([]byte(*choice.Message.Content)) {
-		return agent.Response{}, malformed()
+		return out, malformed()
 	}
 
 	out.Content = json.RawMessage(*choice.Message.Content)
@@ -223,4 +231,17 @@ func (c *Client) Complete(ctx context.Context, in agent.Request) (agent.Response
 
 func malformed() error {
 	return domain.Failure("MODEL_INVALID_RESPONSE", "O assistente retornou uma resposta inválida. Tente novamente.")
+}
+
+func reportedUsage(raw json.RawMessage) *agent.TokenUsage {
+	var usage struct {
+		Input  *int64 `json:"prompt_tokens"`
+		Output *int64 `json:"completion_tokens"`
+	}
+	if json.Unmarshal(raw, &usage) != nil || usage.Input == nil || usage.Output == nil ||
+		*usage.Input < 0 || *usage.Output < 0 {
+		return nil
+	}
+
+	return &agent.TokenUsage{Input: *usage.Input, Output: *usage.Output}
 }

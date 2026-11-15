@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lpyaia/llm-clinic-scheduler/internal/agent/contract"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/trace"
 )
 
@@ -31,6 +32,7 @@ func TestExporterOmitsContentByDefaultAndRedactsSyntheticCredentials(t *testing.
 				"Content": `{"refresh_token":"arbitrary-refresh-value","message":"` + apiKey + `"}`,
 				"message": "Paciente simulado opaque-config-value " + apiKey + " " + sessionToken,
 			})
+			step.RecordModel(contract.ModelUsage{Provider: apiKey, Model: "opaque-config-value"})
 			step.End(map[string]string{"Cookie": "session=private-cookie"}, errors.New(apiKey))
 			run.Finish(map[string]string{"message": "Bearer " + sessionToken}, errors.New(apiKey))
 
@@ -73,8 +75,18 @@ func TestExporterRedactsSecretsThatAreJSONScalars(t *testing.T) {
 			step.End(json.RawMessage(secret), nil)
 			run.Finish(map[string]string{"message": secret}, nil)
 
-			if bytes.Contains(output.Bytes(), []byte(secret)) {
-				t.Fatal("JSON scalar credential bypassed redaction")
+			var execution trace.Execution
+			if err := json.Unmarshal(output.Bytes(), &execution); err != nil {
+				t.Fatal(err)
+			}
+
+			// Structural nulls represent unavailable metrics, rather than captured content.
+			for _, content := range []json.RawMessage{
+				execution.Input, execution.Output, execution.Steps[0].Input, execution.Steps[0].Output,
+			} {
+				if bytes.Contains(content, []byte(secret)) {
+					t.Fatal("JSON scalar credential bypassed content redaction")
+				}
 			}
 
 			if !json.Valid(output.Bytes()) || !bytes.Contains(output.Bytes(), []byte("[redacted]")) {
