@@ -335,3 +335,7 @@ Veja os [cenários de avaliação em português](docs/evals/README.md).
 6. Adapter WhatsApp com deduplicação de mensagens e domínio independente do canal.
 
 Frontend, RAG, WhatsApp e deployment em produção não fazem parte desta entrega.
+
+O [roteiro de traces e métricas](docs/tracing.md) mostra como inspecionar latência, chamadas, tokens e falhas
+por execução. `CLINIC_MODEL_PRICES_FILE` configura a tabela de preços por fornecedor/modelo para estimar custos,
+sem preços fixos no código.

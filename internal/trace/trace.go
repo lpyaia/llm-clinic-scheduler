@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lpyaia/llm-clinic-scheduler/internal/agent/contract"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/domain"
 )
 
@@ -29,6 +30,9 @@ type Options struct {
 	CaptureSyntheticContent bool
 	// Secrets supplies configured credentials that must be removed even in free text.
 	Secrets []string
+	Pricing *Pricing
+	// Now supplies a monotonic clock for durations; defaults to time.Now.
+	Now func() time.Time
 }
 
 type Execution struct {
@@ -43,21 +47,23 @@ type Execution struct {
 	Input          json.RawMessage `json:"input,omitempty"`
 	Output         json.RawMessage `json:"output,omitempty"`
 	Steps          []Step          `json:"steps"`
+	Metrics        Metrics         `json:"metrics"`
 }
 
 type Step struct {
-	ID         string          `json:"id"`
-	ParentID   string          `json:"parent_id,omitempty"`
-	Order      int             `json:"order"`
-	Kind       string          `json:"kind"`
-	ToolName   string          `json:"tool_name,omitempty"`
-	CallID     string          `json:"call_id,omitempty"`
-	StartedAt  time.Time       `json:"started_at"`
-	DurationNS int64           `json:"duration_ns"`
-	Outcome    string          `json:"outcome"`
-	ErrorCode  string          `json:"error_code,omitempty"`
-	Input      json.RawMessage `json:"input,omitempty"`
-	Output     json.RawMessage `json:"output,omitempty"`
+	ID         string               `json:"id"`
+	ParentID   string               `json:"parent_id,omitempty"`
+	Order      int                  `json:"order"`
+	Kind       string               `json:"kind"`
+	ToolName   string               `json:"tool_name,omitempty"`
+	CallID     string               `json:"call_id,omitempty"`
+	StartedAt  time.Time            `json:"started_at"`
+	DurationNS int64                `json:"duration_ns"`
+	Outcome    string               `json:"outcome"`
+	ErrorCode  string               `json:"error_code,omitempty"`
+	Input      json.RawMessage      `json:"input,omitempty"`
+	Output     json.RawMessage      `json:"output,omitempty"`
+	Model      *contract.ModelUsage `json:"model,omitempty"`
 }
 
 // JSONL serializes complete executions atomically within this process. Export failures
@@ -72,6 +78,10 @@ type JSONL struct {
 }
 
 func NewJSONL(writer io.Writer, options Options) *JSONL {
+	if options.Now == nil {
+		options.Now = time.Now
+	}
+
 	return &JSONL{writer: writer, options: options, redactor: newRedactor(options.Secrets)}
 }
 
@@ -94,7 +104,7 @@ func (j *JSONL) Start(ctx context.Context, input string) *Run {
 	}
 
 	return &Run{recorder: j, data: Execution{
-		TraceID: uuid.NewString(), RequestID: id, StartedAt: time.Now(),
+		TraceID: uuid.NewString(), RequestID: id, StartedAt: j.options.Now(),
 		Input: j.content(input), Steps: []Step{},
 	}}
 }
@@ -117,7 +127,7 @@ func (r *Run) StartStep(step Step, input any) *Span {
 		return nil
 	}
 
-	step.ID, step.Order, step.StartedAt = uuid.NewString(), len(r.data.Steps)+1, time.Now()
+	step.ID, step.Order, step.StartedAt = uuid.NewString(), len(r.data.Steps)+1, r.recorder.options.Now()
 	step.ToolName = r.recorder.redactor.text(step.ToolName)
 	if step.CallID != "" {
 		// A provider-controlled identifier is correlation data, never trusted text.
@@ -144,7 +154,7 @@ func (s *Span) End(output any, err error) {
 	}
 
 	step := &s.run.data.Steps[s.index]
-	step.DurationNS = time.Since(step.StartedAt).Nanoseconds()
+	step.DurationNS = s.run.recorder.options.Now().Sub(step.StartedAt).Nanoseconds()
 
 	step.Outcome, step.ErrorCode = outcome(err)
 	step.Output = s.run.recorder.content(output)
@@ -170,9 +180,10 @@ func (r *Run) Finish(output any, err error) {
 		}
 	}
 
-	r.data.DurationNS = time.Since(r.data.StartedAt).Nanoseconds()
+	r.data.DurationNS = r.recorder.options.Now().Sub(r.data.StartedAt).Nanoseconds()
 	r.data.Outcome, r.data.ErrorCode = outcome(err)
 	r.data.Output = r.recorder.content(output)
+	r.data.Metrics = r.metrics()
 
 	j := r.recorder
 	j.mu.Lock()

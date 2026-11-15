@@ -44,6 +44,21 @@ type ToolCall struct {
 type Response struct {
 	Content   json.RawMessage
 	ToolCalls []ToolCall
+	// Usage survives errors when the provider reported consumption before answer validation.
+	Usage ModelUsage
+}
+
+// ModelUsage identifies operator-configured provider/model names, never patient input.
+// Tokens is nil when consumption was not reported or was incomplete/invalid.
+type ModelUsage struct {
+	Provider string      `json:"provider"`
+	Model    string      `json:"model"`
+	Tokens   *TokenUsage `json:"tokens"`
+}
+
+type TokenUsage struct {
+	Input  int64 `json:"input"`
+	Output int64 `json:"output"`
 }
 
 type Result struct {
