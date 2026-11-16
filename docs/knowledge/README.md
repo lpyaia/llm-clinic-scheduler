@@ -71,6 +71,44 @@ Confira, respectivamente, os trechos sobre convênios aceitos, cobertura do Ipê
 Perguntas sem valor definido no FAQ, como o preço da coparticipação, devem recuperar a orientação de consulta à
 recepção; o documento não fornece um valor para ser inferido. O comando continua apresentando somente trechos.
 
+## Outros FAQs fictícios por tema
+
+Os documentos abaixo ampliam o material da mesma clínica fictícia. Cada pergunta e sua resposta permanecem no
+mesmo parágrafo para que a ingestão preserve o contexto do trecho. Informações compartilhadas, como horário,
+endereço e formas de pagamento, seguem o FAQ geral e o FAQ de convênios.
+
+- [Atendimento](faq-atendimento-simulated.md): recepção, primeira visita, cadastro, atrasos e comparecimento.
+- [Agendamentos](faq-agendamentos-simulated.md): disponibilidade, propostas, confirmação, remarcação e cancelamento.
+- [Pagamentos](faq-pagamentos-simulated.md): formas de pagamento, preços, parcelamento, recibos e dúvidas de cobrança.
+- [Acesso e acessibilidade](faq-acessibilidade-simulated.md): localização, rampa, estacionamento e apoio para a visita.
+
+Importe cada arquivo desejado separadamente, usando o mesmo procedimento do FAQ de convênios. Por exemplo:
+
+```powershell
+$atendimento = go run ./cmd/knowledge ingest -file docs/knowledge/faq-atendimento-simulated.md | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0) { throw 'Falha na ingestão do FAQ de atendimento' }
+
+go run ./cmd/knowledge search -document $atendimento.id -question 'Vocês abrem aos domingos?' -limit 3
+go run ./cmd/knowledge search -document $atendimento.id -question 'Com quanto tempo de antecedência chego?' -limit 3
+```
+
+Para conferir os demais documentos, use perguntas com palavras diferentes das usadas nos títulos:
+
+| FAQ | Pergunta de verificação | Trecho esperado |
+| --- | --- | --- |
+| Atendimento | Vocês abrem aos domingos? | Horário de atendimento da recepção |
+| Atendimento | Com quanto tempo de antecedência chego? | Chegada antes do horário marcado |
+| Agendamentos | Escolher uma vaga já deixa a consulta marcada? | Preferência de horário não reserva a vaga |
+| Agendamentos | Se não conseguir trocar, continuo com a reserva antiga? | Horário original preservado |
+| Pagamentos | Posso pagar com cartão de débito? | Formas de pagamento aceitas |
+| Pagamentos | Qual é o preço da consulta? | Valor informado pela recepção; FAQ sem tabela de preços |
+| Acessibilidade | Preciso subir escadas para chegar à recepção? | Entrada com rampa e recepção no térreo |
+| Acessibilidade | Onde deixo o carro e quanto custa? | Estacionamento gratuito e entrada de veículos |
+
+As perguntas são exemplos para inspeção manual, sem garantia de ranking do fornecedor real. Use sempre o ID do
+documento correspondente: importar vários arquivos não habilita uma busca conjunta entre eles. Os exemplos sobre
+preços e recursos não confirmados também permitem verificar se a fonte realmente contém a informação procurada.
+
 ## Extração, chunking e falhas
 
 - Formatos aceitos: `.md` e `.txt`, UTF-8, até 64 KiB. PDF, binários, UTF-8 inválido, falha de leitura ou excesso de
