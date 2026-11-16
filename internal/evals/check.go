@@ -7,11 +7,22 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/domain"
 )
 
 func check(turn TurnReport) []string {
 	failures := []string{}
+	if (turn.Error != "") != turn.Expected.OperationalError {
+		failures = append(failures, "operational error expectation mismatch")
+	}
+
+	for _, text := range turn.Expected.ErrorContains {
+		if !strings.Contains(turn.ErrorMessage, text) {
+			failures = append(failures, "error missing: "+text)
+		}
+	}
+
 	if turn.ErrorCode != turn.Expected.ErrorCode {
 		failures = append(failures, fmt.Sprintf("error code: want %q, got %q",
 			turn.Expected.ErrorCode, turn.ErrorCode))
@@ -48,6 +59,10 @@ func check(turn TurnReport) []string {
 			*turn.Expected.Appointments, len(turn.Appointments)))
 	}
 
+	if turn.Expected.Stored != nil && !storedAppointmentsMatch(turn.Expected.Stored, turn.Appointments) {
+		failures = append(failures, "stored appointment set mismatch")
+	}
+
 	response := turn.Expected.Response
 	for _, text := range response.Contains {
 		if !strings.Contains(turn.Result.Message, text) {
@@ -67,6 +82,29 @@ func check(turn TurnReport) []string {
 
 	if response.Availability != nil && (turn.Result.Availability != nil) != *response.Availability {
 		failures = append(failures, "response availability mismatch")
+	}
+
+	if response.SlotIDs != nil || !response.From.IsZero() || !response.Until.IsZero() {
+		availability := turn.Result.Availability
+		if availability == nil {
+			failures = append(failures, "response availability missing")
+		} else {
+			if response.SlotIDs != nil {
+				ids := make([]uuid.UUID, 0, len(availability.Slots))
+				for _, slot := range availability.Slots {
+					ids = append(ids, slot.ID)
+				}
+
+				if !slices.Equal(ids, *response.SlotIDs) {
+					failures = append(failures, "response slot IDs mismatch")
+				}
+			}
+
+			if (!response.From.IsZero() && !response.From.Equal(availability.From)) ||
+				(!response.Until.IsZero() && !response.Until.Equal(availability.Until)) {
+				failures = append(failures, "response availability interval mismatch")
+			}
+		}
 	}
 
 	if response.Appointments != nil && len(turn.Result.Appointments) != *response.Appointments {
@@ -111,4 +149,51 @@ func effects(before, after []domain.Appointment) []string {
 	}
 
 	return out
+}
+
+// Match distinct records with reassignment: a broad subset must not consume the only
+// appointment matching a later, narrower expectation.
+func storedAppointmentsMatch(expected []json.RawMessage, actual []domain.Appointment) bool {
+	if len(expected) != len(actual) {
+		return false
+	}
+
+	candidates := make([][]int, len(expected))
+	for i, want := range expected {
+		for j, row := range actual {
+			encoded, _ := json.Marshal(row)
+			if matchesArguments(want, encoded) {
+				candidates[i] = append(candidates[i], j)
+			}
+		}
+	}
+
+	assigned := make([]int, len(actual))
+	for i := range assigned {
+		assigned[i] = -1
+	}
+
+	for i := range expected {
+		if !assignAppointment(i, candidates, assigned, make([]bool, len(actual))) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func assignAppointment(expected int, candidates [][]int, assigned []int, visited []bool) bool {
+	for _, actual := range candidates[expected] {
+		if visited[actual] {
+			continue
+		}
+
+		visited[actual] = true
+		if assigned[actual] < 0 || assignAppointment(assigned[actual], candidates, assigned, visited) {
+			assigned[actual] = expected
+			return true
+		}
+	}
+
+	return false
 }

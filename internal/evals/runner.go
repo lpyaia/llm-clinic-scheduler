@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -104,12 +105,16 @@ func runScenario(ctx context.Context, scenario Scenario, options Options, record
 	assistant := agent.New(core, model)
 	assistant.ClinicContact = scenario.ClinicContact
 	principal := domain.Principal{PatientID: scenario.PatientID}
+	otherPatients := scenario.otherPatients()
 	id := uuid.Nil
 	result := ScenarioReport{ID: scenario.ID, Status: "passed"}
 
 	for i, turn := range scenario.Turns {
 		advance, _ := time.ParseDuration(turn.Advance)
 		controlledClock.now = controlledClock.now.Add(advance)
+
+		repo.upsert(turn.UpsertAppointments)
+		repo.failWrite = turn.FailWrite
 
 		model.responses, model.calls = turn.Responses, []Call{}
 		model.replay = nil
@@ -118,6 +123,7 @@ func runScenario(ctx context.Context, scenario Scenario, options Options, record
 		}
 
 		before, beforeErr := core.ListAppointments(ctx, principal, application.AppointmentFilter{})
+		otherBefore, otherBeforeErr := observeAppointments(ctx, core, otherPatients)
 
 		out, err := assistant.ReplyConversation(ctx, principal, id, turn.Message)
 		if out.ConversationID != uuid.Nil {
@@ -130,12 +136,14 @@ func runScenario(ctx context.Context, scenario Scenario, options Options, record
 		}
 
 		after, listErr := core.ListAppointments(ctx, principal, application.AppointmentFilter{})
+		otherAfter, otherAfterErr := observeAppointments(ctx, core, otherPatients)
 		record := TurnReport{
 			Message: turn.Message, Now: controlledClock.now, Expected: turn.Expect,
 			Result: out, Appointments: after, Calls: model.calls,
-			Effects: effects(before, after), Failures: []string{},
+			OtherAppointments: otherAfter,
+			Effects:           effects(before, after), Failures: []string{},
 		}
-		listErr = errors.Join(beforeErr, listErr)
+		listErr = errors.Join(beforeErr, listErr, otherBeforeErr, otherAfterErr)
 
 		if err == nil && ((options.Mode == "scripted" && len(model.responses) > 0) ||
 			(options.Mode == "replay" && len(model.replay) > 0)) {
@@ -144,11 +152,19 @@ func runScenario(ctx context.Context, scenario Scenario, options Options, record
 
 		if err != nil {
 			record.ErrorCode = domain.ErrorCode(err)
+			record.ErrorMessage = err.Error()
+		}
+
+		if listErr != nil || (err != nil && record.ErrorCode == "INTERNAL_ERROR") {
+			record.Error = errors.Join(err, listErr).Error()
 		}
 
 		record.Failures = check(record)
-		if listErr != nil || (err != nil && record.ErrorCode == "INTERNAL_ERROR") {
-			record.Error = errors.Join(err, listErr).Error()
+		if !slices.Equal(otherBefore, otherAfter) {
+			record.Failures = append(record.Failures, "another patient's appointments changed")
+		}
+
+		if listErr != nil || (record.Error != "" && !turn.Expect.OperationalError) {
 			result.Status = "error"
 		} else if len(record.Failures) > 0 && result.Status != "error" {
 			result.Status = "failed"
@@ -161,7 +177,8 @@ func runScenario(ctx context.Context, scenario Scenario, options Options, record
 		}
 
 		result.Turns = append(result.Turns, record)
-		if record.Error != "" || (err != nil && record.ErrorCode != turn.Expect.ErrorCode) {
+		if (record.Error != "" && !turn.Expect.OperationalError) ||
+			(err != nil && record.ErrorCode != turn.Expect.ErrorCode) {
 			break
 		}
 	}
@@ -266,4 +283,23 @@ func (m *observedModel) Complete(ctx context.Context, request agent.Request) (ag
 	}
 
 	return out, nil
+}
+
+// Reads observable state for fixture patients; the runner owns all sequencing.
+func observeAppointments(
+	ctx context.Context, core *application.Service, patients []uuid.UUID,
+) ([]domain.Appointment, error) {
+	rows := []domain.Appointment{}
+
+	for _, patient := range patients {
+		found, err := core.ListAppointments(ctx, domain.Principal{PatientID: patient},
+			application.AppointmentFilter{})
+		if err != nil {
+			return nil, err
+		}
+
+		rows = append(rows, found...)
+	}
+
+	return rows, nil
 }

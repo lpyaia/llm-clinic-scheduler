@@ -131,7 +131,7 @@ func TestCommandDefaultsToOfflineAndReplaysItsReport(t *testing.T) {
 	}
 
 	if code != 0 || original.Configuration.Mode != "scripted" || replayed.Configuration.Mode != "replay" ||
-		original.Totals.Passed != 3 || replayed.Totals.Passed != 3 {
+		original.Totals.Passed != len(original.Scenarios) || replayed.Totals.Passed != len(original.Scenarios) {
 		t.Fatalf("offline and replay must pass without a provider client: code=%d diagnostics=%s", code, &diagnostics)
 	}
 }

@@ -38,10 +38,12 @@ type State struct {
 }
 
 type Turn struct {
-	Message   string       `json:"message"`
-	Advance   string       `json:"advance,omitempty"`
-	Responses []Completion `json:"responses,omitempty"`
-	Expect    Expectations `json:"expect"`
+	Message            string               `json:"message"`
+	Advance            string               `json:"advance,omitempty"`
+	FailWrite          string               `json:"fail_write,omitempty"`
+	UpsertAppointments []domain.Appointment `json:"upsert_appointments,omitempty"`
+	Responses          []Completion         `json:"responses,omitempty"`
+	Expect             Expectations         `json:"expect"`
 }
 
 // Completion is also the portable recording format. Error represents a provider failure.
@@ -64,18 +66,25 @@ type Expectations struct {
 	// Tools is the exact ordered call list. Argument objects match a subset of actual fields.
 	Tools []ToolCall `json:"tools"`
 	// AllowedEffects is a per-turn whitelist: create_appointment, reschedule_appointment, cancel_appointment.
-	AllowedEffects []string            `json:"allowed_effects"`
-	Appointments   *int                `json:"appointments,omitempty"`
-	ErrorCode      string              `json:"error_code,omitempty"`
-	Response       ResponseExpectation `json:"response"`
+	AllowedEffects []string `json:"allowed_effects"`
+	Appointments   *int     `json:"appointments,omitempty"`
+	// Stored matches the entire patient appointment set, using a field subset for each distinct row.
+	Stored           []json.RawMessage   `json:"stored"`
+	ErrorCode        string              `json:"error_code,omitempty"`
+	OperationalError bool                `json:"operational_error,omitempty"`
+	ErrorContains    []string            `json:"error_contains,omitempty"`
+	Response         ResponseExpectation `json:"response"`
 }
 
 type ResponseExpectation struct {
-	Contains      []string `json:"contains,omitempty"`
-	Absent        []string `json:"absent,omitempty"`
-	PendingAction *bool    `json:"pending_action,omitempty"`
-	Availability  *bool    `json:"availability,omitempty"`
-	Appointments  *int     `json:"appointments,omitempty"`
+	Contains      []string     `json:"contains,omitempty"`
+	Absent        []string     `json:"absent,omitempty"`
+	PendingAction *bool        `json:"pending_action,omitempty"`
+	Availability  *bool        `json:"availability,omitempty"`
+	Appointments  *int         `json:"appointments,omitempty"`
+	SlotIDs       *[]uuid.UUID `json:"slot_ids,omitempty"`
+	From          time.Time    `json:"from,omitempty"`
+	Until         time.Time    `json:"until,omitempty"`
 }
 
 func Load(reader io.Reader) (Dataset, error) {
@@ -114,6 +123,15 @@ func (d Dataset) validate() error {
 		}
 
 		for _, turn := range scenario.Turns {
+			if turn.FailWrite != "" && turn.FailWrite != "insert_appointment" &&
+				turn.FailWrite != "update_appointment" {
+				return fmt.Errorf("scenario %s has invalid fail_write", scenario.ID)
+			}
+
+			if turn.Expect.OperationalError && turn.Expect.ErrorCode != "INTERNAL_ERROR" {
+				return fmt.Errorf("scenario %s operational_error requires INTERNAL_ERROR", scenario.ID)
+			}
+
 			if turn.Message == "" || turn.Expect.Tools == nil || turn.Expect.AllowedEffects == nil {
 				return fmt.Errorf("scenario %s requires message, expected tools and allowed_effects", scenario.ID)
 			}
@@ -135,4 +153,24 @@ func (d Dataset) validate() error {
 	}
 
 	return nil
+}
+
+// Include patients introduced by later fixture events so snapshots keep a stable scope.
+func (s Scenario) otherPatients() []uuid.UUID {
+	seen := map[uuid.UUID]bool{s.PatientID: true}
+	rows := append([]domain.Appointment(nil), s.Initial.Appointments...)
+	for _, turn := range s.Turns {
+		rows = append(rows, turn.UpsertAppointments...)
+	}
+
+	patients := []uuid.UUID{}
+
+	for _, row := range rows {
+		if !seen[row.PatientID] {
+			seen[row.PatientID] = true
+			patients = append(patients, row.PatientID)
+		}
+	}
+
+	return patients
 }

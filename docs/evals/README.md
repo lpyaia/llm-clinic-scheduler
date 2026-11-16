@@ -30,6 +30,80 @@ e cancelamento são erros de execução. Um erro de negócio esperado, como `ACT
 O executor verifica os efeitos mesmo quando o turno falha. Erros de negócio esperados permitem continuar na mesma
 conversa; erros inesperados interrompem o cenário, e os demais cenários continuam isoladamente.
 
+## Cobertura dos comportamentos da V2 (#19)
+
+O dataset padrão contém 46 cenários manuais em português, com 116 turnos. Cada cenário declara condições iniciais,
+paciente autenticado, relógio, fuso e uma descrição do critério de aprovação. As expectativas de cada turno são
+conjuntivas: todas precisam passar, incluindo ausência de efeitos em preparação, recusa e ambiguidade.
+As respostas simuladas representam decisões esperadas do modelo; a execução real usa as mesmas mensagens e expectativas.
+
+| Comportamento | Cenários |
+| --- | --- |
+| Criação, confirmação posterior e reenvio | `booking-confirmation`, `booking-same-turn-confirmation` |
+| Recusa, ambiguidade e ausência de proposta | `booking-reject`, `booking-clarify`, `confirmation-without-proposal` |
+| Remarcação: identidade, destino e consentimento | `rescheduling-confirmation`, `rescheduling-reject` |
+| Remarcação ambígua e escolha do agendamento | `rescheduling-clarify`, `ambiguous-select_appointment` |
+| Cancelamento: status e consentimento | `cancellation-confirmation`, `cancellation-reject`, `cancellation-clarify` |
+| Cancelamento com identificação ambígua | `ambiguous-cancel_appointment` |
+| Preferência alterada revoga proposta | `booking-category-change`, `booking-search-revokes-proposal` |
+| Linguagem vaga e extração de categoria | `vague-booking`, `vague-date` |
+| Datas relativas e contexto multi-turn | `relative-tomorrow`, `preferences-multiturn`, `weekday-exact-hours` |
+| Ausência de disponibilidade | `no-availability` |
+| Conflito após preparar | `booking-slot-conflict`, `rescheduling-slot-conflict` |
+| Limite semanal e revalidação | `booking-weekly-limit`, `booking-weekly-limit-changed` |
+| Expiração, inclusive no limite exato | `booking-expired`, `rescheduling-expired`, `cancellation-expired` |
+| Estado alterado entre resumo e confirmação | `rescheduling-changed`, `cancellation-changed` |
+| Falha transitória, rollback e novo consentimento | `booking-transient-write`, `rescheduling-transient-write` |
+| Falha transitória de cancelamento | `cancellation-transient-write` |
+| Recusas clínicas | `medical-refusal`, `medical-diagnosis`, `medical-specialty`, `medical-dose`, `medical-injection` |
+| Pedido clínico durante proposta | `medical-during-proposal` |
+| Contato humano confiável ou ausente | `human-out_of_scope`, `human-not_understood`, `human-contact-unconfigured` |
+| Isolamento de pacientes | `list-own-appointments`, `foreign-select_appointment`, `foreign-cancel_appointment` |
+| Argumento de identidade proibido | `identity-argument-injection` |
+
+Execute toda a suíte e reproduza as respostas capturadas:
+
+```powershell
+New-Item -ItemType Directory -Force .scratch | Out-Null
+go run ./cmd/eval -output .scratch/eval-v2.json
+go run ./cmd/eval -mode replay -replay .scratch/eval-v2.json -output .scratch/eval-v2-replayed.json
+```
+
+Os testes determinísticos de guardas injetam saídas inválidas do modelo: argumentos de identidade proibidos,
+confirmação sem proposta, preparação e confirmação no mesmo turno e tentativa de confirmar após revogação.
+Essas injeções não fazem parte das decisões esperadas do corpus usado com o modelo real, que deve agir com segurança.
+
+O resultado esperado nos dois comandos é `passed=46 failed=0 errors=0`. Duas execuções em modo `scripted` produzem
+relatórios idênticos; o replay conserva cenários, prompts, decisões e efeitos, com configuração de origem registrada.
+Os testes de `internal/evals` também substituem recusa/ambiguidade por confirmação e exigem reprovação pelo efeito
+proibido nas três operações. Um cancelamento que não mudar status ou uma remarcação para destino errado falham
+na comparação do estado armazenado, mesmo quando a quantidade de agendamentos continua igual.
+
+`upsert_appointments` substitui ou adiciona registros fictícios antes de um turno para representar eventos externos.
+A linha de base dos efeitos é capturada depois desses eventos: uma reserva concorrente não conta como efeito do agente.
+`fail_write` injeta uma única falha em `insert_appointment` ou `update_appointment`, após modificar o repositório
+simulado,
+para exercitar o rollback real do Scheduling Core. Não muda o repositório ou a configuração da aplicação em execução.
+
+Somente cenários de falha deliberada usam `expect.operational_error: true`, junto de `error_code: INTERNAL_ERROR`,
+mensagem de recuperação, efeitos proibidos e estado esperado. O erro continua registrado em `error` e `error_message`;
+o cenário passa quando demonstra a recuperação esperada. Uma falha operacional inesperada continua em `totals.errors`,
+com código de saída 2. Uma expectativa não atendida, inclusive ausência da falha injetada, fica em `totals.failed`.
+
+Para inspecionar interpretação com modelo real, execute explicitamente, após configurar as credenciais:
+
+```powershell
+go run ./cmd/eval -mode real -scenario rescheduling-clarify -output .scratch/eval-real-v2.json
+go run ./cmd/eval -mode replay -scenario rescheduling-clarify -replay .scratch/eval-real-v2.json
+go run ./cmd/eval -mode real -timeout 30m -output .scratch/eval-real-v2-all.json
+```
+
+O modo real usa somente o repositório em memória de cada cenário, inclusive para falhas e alterações externas.
+Não usa sessão, servidor ou banco de dados da aplicação. O relatório permite inspecionar chamadas, argumentos,
+prompts, erros e efeitos. O tempo maior permite executar toda a suíte; chamadas ao fornecedor
+mantêm seu próprio timeout.
+Não há execução paga em CI nem evidência de qualidade linguística inferida dos resultados simulados.
+
 ### Formato do dataset
 
 `version` deve ser `1`. Cada cenário declara `id` único, `description` opcional, `now` RFC3339, `timezone` IANA,
@@ -39,6 +113,8 @@ conversa; erros inesperados interrompem o cenário, e os demais cenários contin
   de domínio Go, como `ID`, `PatientID`, `DoctorID`, `StartsAt` e `Status`. IDs de fixture devem ser UUIDs estáveis.
 - Cada turno tem `message`, `responses` simuladas e `expect`. `advance`, por exemplo `11m`, avança o relógio antes
   da mensagem. Sem avanço, o tempo permanece fixo, inclusive durante chamadas ao fornecedor real.
+- `upsert_appointments` usa os campos de domínio de `initial.appointments`; `fail_write` aceita apenas
+  `insert_appointment` e `update_appointment`. São controles exclusivos do ambiente fictício de avaliações.
 - Uma resposta simulada tem `tool_calls` com `id`, `name` e `arguments`, ou `content` JSON para a resposta estruturada.
   `error` simula falha do fornecedor; `error_code` preserva o código e `error_kind` preserva cancelamento ou deadline
   em gravações. Respostas extras ou
@@ -48,9 +124,17 @@ conversa; erros inesperados interrompem o cenário, e os demais cenários contin
 - `expect.allowed_effects` é obrigatório e lista apenas `create_appointment`, `reschedule_appointment` e
   `cancel_appointment`. Uma lista vazia proíbe mutações de agendamento; preparar uma proposta não cria uma reserva.
   `expect.appointments` exige a quantidade armazenada para o paciente, evitando aceitar uma confirmação sem efeito.
+- `expect.stored` compara todo o conjunto de agendamentos do paciente, sem depender da ordem. Cada objeto exige
+  os campos de domínio declarados, como `ID`, `SlotID`, `DoctorID`, `Category`, `Status` e `Version`.
+  Cada objeto corresponde a um registro distinto; registros adicionais falham. Uma lista vazia exige conjunto vazio.
+  Omita `ID` para reservas novas cujo UUID é gerado pela aplicação.
+  `other_appointments` registra as reservas de outros pacientes; qualquer alteração pelo agente reprova o turno.
 - `expect.response` pode verificar trechos `contains`, trechos proibidos `absent`, presença de `pending_action` e
   `availability`, e quantidade de `appointments` apresentada. Isso verifica comportamento sem comparar toda a frase.
   `expect.error_code` exige um erro de negócio específico; ausente, exige que o agente termine sem erro.
+- `expect.response.slot_ids` compara a lista ordenada exata de horários disponíveis, inclusive uma lista vazia.
+  `expect.response.from` e `until` verificam os limites inclusivo e exclusivo por instantes RFC3339.
+  `expect.error_contains` verifica trechos da orientação retornada com erros de negócio ou operacionais.
 
 Os testes demonstram aprovação, reprovação por argumentos e efeitos proibidos, indisponibilidade do modelo,
 expiração pelo relógio controlado, repetição idêntica e reprodução de gravações com detecção de mudança do prompt.

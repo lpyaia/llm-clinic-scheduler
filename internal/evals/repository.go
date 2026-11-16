@@ -14,8 +14,9 @@ import (
 
 // repository is scoped to a single sequential evaluation scenario, never shared with the server.
 type repository struct {
-	state   State
-	actions map[uuid.UUID]domain.Action
+	state     State
+	actions   map[uuid.UUID]domain.Action
+	failWrite string
 }
 
 var _ application.Repository = (*repository)(nil)
@@ -23,6 +24,18 @@ var _ application.Repository = (*repository)(nil)
 func newRepository(state State) *repository {
 	state.Appointments = slices.Clone(state.Appointments)
 	return &repository{state: state, actions: map[uuid.UUID]domain.Action{}}
+}
+
+// Fixture events happen between turns, before taking the baseline for agent effects.
+func (r *repository) upsert(rows []domain.Appointment) {
+	for _, row := range rows {
+		index := slices.IndexFunc(r.state.Appointments, func(old domain.Appointment) bool { return old.ID == row.ID })
+		if index < 0 {
+			r.state.Appointments = append(r.state.Appointments, row)
+		} else {
+			r.state.Appointments[index] = row
+		}
+	}
 }
 
 func (r *repository) Transaction(ctx context.Context, operation func(application.Repository) error) error {
@@ -168,7 +181,7 @@ func (r *repository) InsertAppointment(ctx context.Context, row domain.Appointme
 
 	r.state.Appointments = append(r.state.Appointments, row)
 
-	return nil
+	return r.writeFailure("insert_appointment")
 }
 
 func (r *repository) UpdateAppointment(ctx context.Context, row domain.Appointment, version int) error {
@@ -179,11 +192,23 @@ func (r *repository) UpdateAppointment(ctx context.Context, row domain.Appointme
 	for i, old := range r.state.Appointments {
 		if old.ID == row.ID && old.PatientID == row.PatientID && old.Version == version {
 			r.state.Appointments[i] = row
-			return nil
+			return r.writeFailure("update_appointment")
 		}
 	}
 
 	return domain.ErrAppointmentChanged
+}
+
+// Fail after changing the simulated rows so the core's transaction must restore them.
+// Consuming the fault is not transactional: a later attempt can succeed.
+func (r *repository) writeFailure(operation string) error {
+	if r.failWrite != operation {
+		return nil
+	}
+
+	r.failWrite = ""
+
+	return errors.New("simulated transient appointment write failure")
 }
 
 func (r *repository) InsertAction(ctx context.Context, action domain.Action) error {

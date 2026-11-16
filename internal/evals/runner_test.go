@@ -147,7 +147,7 @@ func TestBookingEvaluationDetectsForbiddenEffects(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if report.Totals.Passed != 2 || report.Totals.Failed != 1 || report.Totals.Errors != 0 {
+	if report.Totals.Passed != len(dataset.Scenarios)-1 || report.Totals.Failed != 1 || report.Totals.Errors != 0 {
 		t.Fatalf("expected two passes and a forbidden mutation failure, got %+v", report.Totals)
 	}
 
@@ -173,8 +173,8 @@ func TestRecordedBookingReplaysWithTheSameBehaviorAndPrompts(t *testing.T) {
 
 	a, _ := json.Marshal(first)
 	b, _ := json.Marshal(second)
-	if !bytes.Equal(a, b) || first.Totals.Passed != 3 {
-		t.Fatalf("booking reports must repeat exactly with three passes: %+v", first.Totals)
+	if !bytes.Equal(a, b) || first.Totals.Passed != len(dataset.Scenarios) {
+		t.Fatalf("booking reports must repeat exactly with all scenarios passing: %+v", first.Totals)
 	}
 
 	replayed, err := evals.Run(context.Background(), dataset, evals.Options{Mode: "replay", Recording: &first})
@@ -184,7 +184,7 @@ func TestRecordedBookingReplaysWithTheSameBehaviorAndPrompts(t *testing.T) {
 
 	a, _ = json.Marshal(first.Scenarios)
 	b, _ = json.Marshal(replayed.Scenarios)
-	if !bytes.Equal(a, b) || replayed.Totals.Passed != 3 {
+	if !bytes.Equal(a, b) || replayed.Totals.Passed != len(dataset.Scenarios) {
 		t.Fatalf("recorded prompts, responses and effects must replay: %+v", replayed.Totals)
 	}
 
@@ -199,7 +199,7 @@ func TestRecordedBookingReplaysWithTheSameBehaviorAndPrompts(t *testing.T) {
 func TestScenarioClockExpiresAProposalBeforeCallingTheModel(t *testing.T) {
 	dataset := conversationDataset(t)
 
-	dataset.Scenarios = dataset.Scenarios[2:]
+	dataset.Scenarios = dataset.Scenarios[2:3]
 	scenario := &dataset.Scenarios[0]
 	scenario.Turns = scenario.Turns[:3]
 	scenario.Turns[2] = evals.Turn{
@@ -239,7 +239,7 @@ func TestScenarioClockExpiresAProposalBeforeCallingTheModel(t *testing.T) {
 func TestEvaluationRejectsWrongToolArguments(t *testing.T) {
 	dataset := conversationDataset(t)
 
-	dataset.Scenarios = dataset.Scenarios[2:]
+	dataset.Scenarios = dataset.Scenarios[2:3]
 	dataset.Scenarios[0].Turns = dataset.Scenarios[0].Turns[:1]
 	dataset.Scenarios[0].Turns[0].Expect.Tools[0].Arguments = json.RawMessage(`{"doctor":"Beatriz"}`)
 
