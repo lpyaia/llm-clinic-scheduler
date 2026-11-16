@@ -38,16 +38,18 @@ type ScenarioReport struct {
 }
 
 type TurnReport struct {
-	Message      string               `json:"message"`
-	Now          time.Time            `json:"now"`
-	Expected     Expectations         `json:"expected"`
-	Result       agent.Result         `json:"result"`
-	Appointments []domain.Appointment `json:"appointments"`
-	Calls        []Call               `json:"calls"`
-	Effects      []string             `json:"effects"`
-	Failures     []string             `json:"failures"`
-	Error        string               `json:"error,omitempty"`
-	ErrorCode    string               `json:"error_code,omitempty"`
+	Message           string               `json:"message"`
+	Now               time.Time            `json:"now"`
+	Expected          Expectations         `json:"expected"`
+	Result            agent.Result         `json:"result"`
+	Appointments      []domain.Appointment `json:"appointments"`
+	OtherAppointments []domain.Appointment `json:"other_appointments"`
+	Calls             []Call               `json:"calls"`
+	Effects           []string             `json:"effects"`
+	Failures          []string             `json:"failures"`
+	Error             string               `json:"error,omitempty"`
+	ErrorCode         string               `json:"error_code,omitempty"`
+	ErrorMessage      string               `json:"error_message,omitempty"`
 }
 
 // Request includes the full prompt, tool schemas and structured-answer configuration.

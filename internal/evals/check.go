@@ -7,11 +7,22 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/domain"
 )
 
 func check(turn TurnReport) []string {
 	failures := []string{}
+	if (turn.Error != "") != turn.Expected.OperationalError {
+		failures = append(failures, "operational error expectation mismatch")
+	}
+
+	for _, text := range turn.Expected.ErrorContains {
+		if !strings.Contains(turn.ErrorMessage, text) {
+			failures = append(failures, "error missing: "+text)
+		}
+	}
+
 	if turn.ErrorCode != turn.Expected.ErrorCode {
 		failures = append(failures, fmt.Sprintf("error code: want %q, got %q",
 			turn.Expected.ErrorCode, turn.ErrorCode))
@@ -48,6 +59,25 @@ func check(turn TurnReport) []string {
 			*turn.Expected.Appointments, len(turn.Appointments)))
 	}
 
+	if turn.Expected.Stored != nil {
+		remaining := slices.Clone(turn.Appointments)
+		for _, expected := range turn.Expected.Stored {
+			index := slices.IndexFunc(remaining, func(row domain.Appointment) bool {
+				actual, _ := json.Marshal(row)
+				return matchesArguments(expected, actual)
+			})
+			if index < 0 {
+				failures = append(failures, fmt.Sprintf("stored appointment missing: %s", expected))
+			} else {
+				remaining = slices.Delete(remaining, index, index+1)
+			}
+		}
+
+		if len(remaining) > 0 {
+			failures = append(failures, "unexpected stored appointments")
+		}
+	}
+
 	response := turn.Expected.Response
 	for _, text := range response.Contains {
 		if !strings.Contains(turn.Result.Message, text) {
@@ -67,6 +97,29 @@ func check(turn TurnReport) []string {
 
 	if response.Availability != nil && (turn.Result.Availability != nil) != *response.Availability {
 		failures = append(failures, "response availability mismatch")
+	}
+
+	if response.SlotIDs != nil || !response.From.IsZero() || !response.Until.IsZero() {
+		availability := turn.Result.Availability
+		if availability == nil {
+			failures = append(failures, "response availability missing")
+		} else {
+			if response.SlotIDs != nil {
+				ids := make([]uuid.UUID, 0, len(availability.Slots))
+				for _, slot := range availability.Slots {
+					ids = append(ids, slot.ID)
+				}
+
+				if !slices.Equal(ids, *response.SlotIDs) {
+					failures = append(failures, "response slot IDs mismatch")
+				}
+			}
+
+			if (!response.From.IsZero() && !response.From.Equal(availability.From)) ||
+				(!response.Until.IsZero() && !response.Until.Equal(availability.Until)) {
+				failures = append(failures, "response availability interval mismatch")
+			}
+		}
 	}
 
 	if response.Appointments != nil && len(turn.Result.Appointments) != *response.Appointments {
