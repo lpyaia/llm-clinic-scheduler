@@ -23,6 +23,34 @@ type Client struct {
 	HTTPClient    *http.Client
 }
 
+// Configuration describes non-secret settings used by Complete, including implicit defaults.
+type Configuration struct {
+	Endpoint            string `json:"endpoint"`
+	MaxCompletionTokens int    `json:"max_completion_tokens"`
+	ReasoningEffort     string `json:"reasoning_effort,omitempty"`
+	ParallelToolCalls   bool   `json:"parallel_tool_calls"`
+	Store               bool   `json:"store"`
+	HTTPTimeout         string `json:"http_timeout"`
+}
+
+func (c *Client) Configuration() Configuration {
+	timeout := 30 * time.Second
+	if c.HTTPClient != nil {
+		timeout = c.HTTPClient.Timeout
+	}
+
+	settings := Configuration{
+		Endpoint: "https://api.openai.com/v1/chat/completions", MaxCompletionTokens: 2048,
+		HTTPTimeout: timeout.String(),
+	}
+	if c.Model == "gpt-6-luna" {
+		// Chat Completions tool calling requires reasoning to be disabled for Luna.
+		settings.ReasoningEffort = "none"
+	}
+
+	return settings
+}
+
 type function struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description,omitempty"`
@@ -79,7 +107,11 @@ func (c *Client) Complete(ctx context.Context, in agent.Request) (agent.Response
 	}
 
 	request.Model = c.Model
-	request.MaxCompletionTokens = 2048
+	settings := c.Configuration()
+	request.MaxCompletionTokens = settings.MaxCompletionTokens
+	request.ReasoningEffort = settings.ReasoningEffort
+	request.ParallelToolCalls = settings.ParallelToolCalls
+	request.Store = settings.Store
 
 	if in.RequireTool {
 		request.ToolChoice = "required"
@@ -90,11 +122,6 @@ func (c *Client) Complete(ctx context.Context, in agent.Request) (agent.Response
 		request.ResponseFormat.JSONSchema.Name = in.ResponseSchema.Name
 		request.ResponseFormat.JSONSchema.Strict = true
 		request.ResponseFormat.JSONSchema.Schema = in.ResponseSchema.Schema
-	}
-
-	if c.Model == "gpt-6-luna" {
-		// Chat Completions tool calling requires reasoning to be disabled for Luna.
-		request.ReasoningEffort = "none"
 	}
 
 	for _, item := range in.Messages {
@@ -136,7 +163,7 @@ func (c *Client) Complete(ctx context.Context, in agent.Request) (agent.Response
 	req, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodPost,
-		"https://api.openai.com/v1/chat/completions",
+		settings.Endpoint,
 		bytes.NewReader(body),
 	)
 	if err != nil {
