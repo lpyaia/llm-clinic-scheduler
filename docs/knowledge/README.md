@@ -1,0 +1,93 @@
+# Ingestão e recuperação de documentos da clínica
+
+A entrega de #20 demonstra recuperação antes da integração ao agente. O operador importa um FAQ e pesquisa
+trechos classificados por similaridade de cosseno, com documento, texto e linhas para conferência da fonte.
+
+## Executar
+
+Use Go 1.27+, Docker Desktop e a `.env` descrita no [README principal](../../README.md). O Compose utiliza
+`pgvector/pgvector:0.8.7-pg17`, compatível com os dados PostgreSQL 17 do volume existente. Recrie o serviço para
+carregar a extensão instalada na nova imagem; preserve o volume:
+
+```powershell
+docker compose up -d --wait db
+go run ./cmd/clinic migrate
+```
+
+A migration instala a extensão `vector` no schema `public` e cria as tabelas de documentos e chunks. O usuário de
+migration precisa de permissão para instalar extensões. PostgreSQL 17 sem pgvector instalado não pode aplicá-la.
+O rollback remove somente as tabelas desta entrega, preservando a extensão compartilhada.
+
+Configure na `.env` (ou no ambiente) as credenciais e o modelo de embeddings. São independentes de `OPENAI_MODEL`:
+
+```dotenv
+OPENAI_API_KEY=<sua-chave>
+EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_DIMENSIONS=1536
+```
+
+O adapter aceita `text-embedding-3-small` (até 1536 dimensões) ou `text-embedding-3-large` (até 3072).
+A API recebe explicitamente modelo, dimensionalidade e `encoding_format=float`.
+Veja o [contrato de embeddings](https://developers.openai.com/api/reference/resources/embeddings/methods/create)
+e os [operadores do pgvector](https://github.com/pgvector/pgvector#querying).
+
+O fluxo abaixo envia o FAQ fictício e a pergunta à OpenAI e pode gerar cobrança. Não exige modelo conversacional.
+Execute na raiz do projeto:
+
+```powershell
+$imported = go run ./cmd/knowledge ingest -file docs/knowledge/faq-simulated.md | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0) { throw 'Falha na ingestão' }
+$imported
+
+go run ./cmd/knowledge search -document $imported.id -question 'Posso estacionar na clínica?' -limit 3
+go run ./cmd/knowledge search -document $imported.id -question 'A recepção abre no sábado?' -limit 3
+```
+
+Cada resultado JSON contém `document_id`, `source`, `chunk` (ordinal a partir de 1), `text`, `start_line`,
+`end_line` e `similarity`. Similaridade maior aparece primeiro; empates seguem a ordem dos chunks na fonte.
+Na primeira pergunta, confira o trecho “Há estacionamento?”; na segunda, “Qual é o horário de atendimento?”.
+Os valores de similaridade dependem do modelo; não são probabilidades nem uma garantia de relevância.
+O comando apresenta trechos recuperados, sem compor uma resposta clínica ou aplicar limiar de abstention.
+
+Guarde o `id` retornado para pesquisar após reiniciar o processo. Cada importação cria um documento novo e imutável;
+reimportar não substitui documentos anteriores. A busca usa somente o documento escolhido.
+
+## Extração, chunking e falhas
+
+- Formatos aceitos: `.md` e `.txt`, UTF-8, até 64 KiB. PDF, binários, UTF-8 inválido, falha de leitura ou excesso de
+  tamanho retornam `document extraction failed`; nenhum embedding é solicitado para esses casos.
+- Um documento sem texto retorna `document contains no text`. A extração remove BOM UTF-8 inicial e normaliza
+  CRLF/CR para LF, preservando os números de linha da fonte. Markdown é mantido como texto, incluindo seus títulos.
+- Parágrafos separados por linhas em branco formam chunks de até 1000 caracteres Unicode, sem overlap de conteúdo.
+  Linhas longas são divididas; nesse caso, chunks diferentes podem citar a mesma linha. O limite é de 256 chunks.
+- Embeddings são gerados antes da transação. Falha do fornecedor, quantidade incorreta de vetores, dimensão errada,
+  NaN, infinito e vetores zero interrompem a ingestão. Documento e chunks são gravados em uma única transação;
+  falha de banco desfaz toda a gravação. Contexto cancelado e `COMMAND_TIMEOUT` interrompem a operação.
+- Provider, modelo e dimensões ficam registrados por documento. Uma busca com configuração diferente retorna
+  `embedding configuration differs from the document`; reimporte o documento para usar outra configuração.
+  O banco também verifica dimensões por chunk e sua correspondência com o documento.
+- Documento desconhecido retorna `document not found`. Pergunta vazia, maior que 1000 caracteres Unicode, UUID
+  inválido ou limite fora de 1..100 são rejeitados. Erros saem em stderr e o processo termina com código
+  diferente de zero.
+
+A busca faz varredura exata com distância de cosseno no PostgreSQL; esta fatia não adiciona índices aproximados.
+Conteúdo e localização vêm da fonte persistida. Alterar o arquivo local após a ingestão não altera o documento salvo.
+
+## Verificar sem credenciais externas
+
+```powershell
+.\scripts\test-integration.ps1 -run TestKnowledge -v
+.\scripts\test-unit.ps1 -run TestEmbeddings -v
+```
+
+Os testes usam PostgreSQL/pgvector real em `TEST_DATABASE_URL`, com um schema isolado por teste, e embeddings
+controlados de três dimensões. Verificam persistência, ranking conhecido, citações, extração e incompatibilidades.
+Os testes HTTP usam um provedor local simulado para validar o contrato, erros e respostas malformadas.
+Não demonstram a qualidade semântica do fornecedor real; as perguntas do roteiro permitem inspecioná-la manualmente.
+
+## Coordenação
+
+`knowledge.Service` sequencia extração → chunking → embeddings → gravação atômica. O repositório PostgreSQL mantém
+a transação somente durante a gravação, sem chamada externa sob lock. Na busca, o serviço valida a entrada e gera
+o embedding da pergunta; o repositório verifica a configuração persistida antes de comparar vetores. Documentos são
+imutáveis nesta entrega. Falhas anteriores à gravação não criam estado; falhas durante a gravação fazem rollback.
