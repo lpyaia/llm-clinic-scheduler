@@ -88,6 +88,8 @@ Não demonstram a qualidade semântica do fornecedor real; as perguntas do rotei
 ## Coordenação
 
 `knowledge.Service` sequencia extração → chunking → embeddings → gravação atômica. O repositório PostgreSQL mantém
-a transação somente durante a gravação, sem chamada externa sob lock. Na busca, o serviço valida a entrada e gera
-o embedding da pergunta; o repositório verifica a configuração persistida antes de comparar vetores. Documentos são
-imutáveis nesta entrega. Falhas anteriores à gravação não criam estado; falhas durante a gravação fazem rollback.
+a transação somente durante a gravação, sem chamada externa sob lock. Na busca, o serviço valida a entrada, consulta
+somente a configuração persistida e a confere antes de gerar o embedding da pergunta. A consulta dos chunks também
+filtra a configuração no SQL antes de comparar vetores, sem repetir a leitura de metadados quando há resultados.
+Documentos são imutáveis nesta entrega. Falhas anteriores à gravação não criam estado; falhas durante a gravação
+fazem rollback.

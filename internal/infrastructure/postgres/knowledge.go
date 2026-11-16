@@ -44,24 +44,16 @@ func (s *Store) SaveDocument(ctx context.Context, doc knowledge.Document, chunks
 	})
 }
 
-func (s *Store) Document(ctx context.Context, id uuid.UUID) (knowledge.Document, error) {
-	var row struct {
-		ID                               uuid.UUID
-		Source, Content, Provider, Model string
-		Dimensions, ChunkCount           int
-	}
+func (s *Store) DocumentConfig(ctx context.Context, id uuid.UUID) (knowledge.EmbeddingConfig, error) {
+	var cfg knowledge.EmbeddingConfig
 
-	err := s.db.WithContext(ctx).Table("clinic_documents").Where("id = ?", id).Take(&row).Error
+	err := s.db.WithContext(ctx).Table("clinic_documents").
+		Select("provider, model, dimensions").Where("id = ?", id).Take(&cfg).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return knowledge.Document{}, knowledge.ErrNotFound
+		return knowledge.EmbeddingConfig{}, knowledge.ErrNotFound
 	}
 
-	return knowledge.Document{
-		ID: row.ID, Source: row.Source, Content: row.Content, ChunkCount: row.ChunkCount,
-		EmbeddingConfig: knowledge.EmbeddingConfig{
-			Provider: row.Provider, Model: row.Model, Dimensions: row.Dimensions,
-		},
-	}, err
+	return cfg, err
 }
 
 func (s *Store) SearchDocument(
@@ -71,17 +63,9 @@ func (s *Store) SearchDocument(
 		return nil, err
 	}
 
-	doc, err := s.Document(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-
-	if doc.EmbeddingConfig != cfg {
-		return nil, knowledge.ErrIncompatible
-	}
-
 	results := make([]knowledge.Result, 0)
-	err = s.db.WithContext(ctx).Raw(`
+
+	err := s.db.WithContext(ctx).Raw(`
 		SELECT c.document_id, d.source, c.ordinal, c.content AS text, c.start_line, c.end_line,
 		       1 - (c.embedding OPERATOR(public.<=>) ?::public.vector) AS similarity
 		FROM clinic_document_chunks c JOIN clinic_documents d ON d.id = c.document_id
@@ -90,8 +74,24 @@ func (s *Store) SearchDocument(
 		LIMIT ?`,
 		vectorLiteral(vector), id, cfg.Provider, cfg.Model, cfg.Dimensions, vectorLiteral(vector), limit,
 	).Scan(&results).Error
+	if err != nil {
+		return nil, err
+	}
 
-	return results, err
+	// The SQL guard enforces compatibility without reloading metadata on successful searches.
+	// Resolve an empty result explicitly so an incompatible configuration cannot pass silently.
+	if len(results) == 0 {
+		recorded, err := s.DocumentConfig(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+
+		if recorded != cfg {
+			return nil, knowledge.ErrIncompatible
+		}
+	}
+
+	return results, nil
 }
 
 func vectorLiteral(vector []float32) string {

@@ -102,7 +102,7 @@ type Embedder interface {
 // configuration before comparing vectors. Failed writes leave no document or partial chunks.
 type Repository interface {
 	SaveDocument(context.Context, Document, []Chunk) error
-	Document(context.Context, uuid.UUID) (Document, error)
+	DocumentConfig(context.Context, uuid.UUID) (EmbeddingConfig, error)
 	SearchDocument(context.Context, uuid.UUID, EmbeddingConfig, []float32, int) ([]Result, error)
 }
 
@@ -167,12 +167,12 @@ func (s *Service) Search(ctx context.Context, id uuid.UUID, question string, lim
 		return nil, ErrInput
 	}
 
-	doc, err := s.repo.Document(ctx, id)
+	cfg, err := s.repo.DocumentConfig(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	if doc.EmbeddingConfig != s.config {
+	if cfg != s.config {
 		return nil, ErrIncompatible
 	}
 
