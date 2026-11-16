@@ -324,7 +324,7 @@
     },
     {
       "id": "booking-reject",
-      "description": "Proposta de criação: reject não cria reserva e revoga a autoridade.",
+      "description": "Proposta de criação: reject não cria reserva.",
       "now": "2026-11-01T09:00:00-03:00",
       "timezone": "America/Sao_Paulo",
       "patient_id": "10000000-0000-0000-0000-000000000001",
@@ -463,45 +463,12 @@
               "pending_action": false
             }
           }
-        },
-        {
-          "message": "Sim, confirmo.",
-          "responses": [
-            {
-              "tool_calls": [
-                {
-                  "id": "call",
-                  "name": "respond_to_proposal",
-                  "arguments": {
-                    "decision": "confirm"
-                  }
-                }
-              ]
-            }
-          ],
-          "expect": {
-            "tools": [
-              {
-                "name": "respond_to_proposal",
-                "arguments": {
-                  "decision": "confirm"
-                }
-              }
-            ],
-            "allowed_effects": [],
-            "appointments": 0,
-            "response": {},
-            "error_code": "MODEL_INVALID_RESPONSE",
-            "error_contains": [
-              "nova preparação"
-            ]
-          }
         }
       ]
     },
     {
       "id": "booking-clarify",
-      "description": "Proposta de criação: clarify não cria reserva e revoga a autoridade.",
+      "description": "Proposta de criação: clarify não cria reserva.",
       "now": "2026-11-01T09:00:00-03:00",
       "timezone": "America/Sao_Paulo",
       "patient_id": "10000000-0000-0000-0000-000000000001",
@@ -640,39 +607,6 @@
               "pending_action": false
             }
           }
-        },
-        {
-          "message": "Sim, confirmo.",
-          "responses": [
-            {
-              "tool_calls": [
-                {
-                  "id": "call",
-                  "name": "respond_to_proposal",
-                  "arguments": {
-                    "decision": "confirm"
-                  }
-                }
-              ]
-            }
-          ],
-          "expect": {
-            "tools": [
-              {
-                "name": "respond_to_proposal",
-                "arguments": {
-                  "decision": "confirm"
-                }
-              }
-            ],
-            "allowed_effects": [],
-            "appointments": 0,
-            "response": {},
-            "error_code": "MODEL_INVALID_RESPONSE",
-            "error_contains": [
-              "nova preparação"
-            ]
-          }
         }
       ]
     },
@@ -718,11 +652,9 @@
             {
               "tool_calls": [
                 {
-                  "id": "call",
-                  "name": "respond_to_proposal",
-                  "arguments": {
-                    "decision": "confirm"
-                  }
+                  "id": "clarify",
+                  "name": "create_appointment",
+                  "arguments": {}
                 }
               ]
             }
@@ -730,26 +662,23 @@
           "expect": {
             "tools": [
               {
-                "name": "respond_to_proposal",
-                "arguments": {
-                  "decision": "confirm"
-                }
+                "name": "create_appointment",
+                "arguments": {}
               }
             ],
             "allowed_effects": [],
             "appointments": 0,
-            "response": {},
-            "error_code": "MODEL_INVALID_RESPONSE",
-            "error_contains": [
-              "segurança"
-            ]
+            "response": {
+              "pending_action": false,
+              "appointments": 0
+            }
           }
         }
       ]
     },
     {
       "id": "booking-same-turn-confirmation",
-      "description": "Preparar e tentar confirmar no mesmo turno não cria reserva.",
+      "description": "Pedido para marcar no mesmo turno da escolha somente prepara resumo, sem criar reserva.",
       "now": "2026-11-01T09:00:00-03:00",
       "timezone": "America/Sao_Paulo",
       "patient_id": "10000000-0000-0000-0000-000000000001",
@@ -832,13 +761,6 @@
                     "slot_id": "40000000-0000-0000-0000-000000000001",
                     "category": "consultation"
                   }
-                },
-                {
-                  "id": "confirm",
-                  "name": "respond_to_proposal",
-                  "arguments": {
-                    "decision": "confirm"
-                  }
                 }
               ]
             }
@@ -851,18 +773,17 @@
                   "slot_id": "40000000-0000-0000-0000-000000000001",
                   "category": "consultation"
                 }
-              },
-              {
-                "name": "respond_to_proposal",
-                "arguments": {
-                  "decision": "confirm"
-                }
               }
             ],
             "allowed_effects": [],
             "appointments": 0,
-            "response": {},
-            "error_code": "MODEL_INVALID_RESPONSE"
+            "response": {
+              "pending_action": true,
+              "appointments": 0,
+              "contains": [
+                "confirma"
+              ]
+            }
           }
         }
       ]
@@ -1194,39 +1115,6 @@
               "slot_ids": [],
               "pending_action": false
             }
-          }
-        },
-        {
-          "message": "Sim, confirmo.",
-          "responses": [
-            {
-              "tool_calls": [
-                {
-                  "id": "call",
-                  "name": "respond_to_proposal",
-                  "arguments": {
-                    "decision": "confirm"
-                  }
-                }
-              ]
-            }
-          ],
-          "expect": {
-            "tools": [
-              {
-                "name": "respond_to_proposal",
-                "arguments": {
-                  "decision": "confirm"
-                }
-              }
-            ],
-            "allowed_effects": [],
-            "appointments": 0,
-            "response": {},
-            "error_code": "MODEL_INVALID_RESPONSE",
-            "error_contains": [
-              "segurança"
-            ]
           }
         }
       ]
@@ -1707,7 +1595,7 @@
     },
     {
       "id": "rescheduling-reject",
-      "description": "Responder reject não altera o agendamento; confirmação antiga é revogada.",
+      "description": "Responder reject não altera o agendamento.",
       "now": "2026-11-01T09:00:00-03:00",
       "timezone": "America/Sao_Paulo",
       "patient_id": "10000000-0000-0000-0000-000000000001",
@@ -1929,58 +1817,12 @@
               }
             ]
           }
-        },
-        {
-          "message": "Sim, confirmo.",
-          "responses": [
-            {
-              "tool_calls": [
-                {
-                  "id": "call",
-                  "name": "respond_to_proposal",
-                  "arguments": {
-                    "decision": "confirm"
-                  }
-                }
-              ]
-            }
-          ],
-          "expect": {
-            "tools": [
-              {
-                "name": "respond_to_proposal",
-                "arguments": {
-                  "decision": "confirm"
-                }
-              }
-            ],
-            "allowed_effects": [],
-            "appointments": 1,
-            "response": {},
-            "stored": [
-              {
-                "ID": "50000000-0000-0000-0000-000000000010",
-                "PatientID": "10000000-0000-0000-0000-000000000001",
-                "SlotID": "40000000-0000-0000-0000-000000000001",
-                "DoctorID": "30000000-0000-0000-0000-000000000001",
-                "DoctorName": "Dra. Ana Souza",
-                "StartsAt": "2026-11-04T14:00:00-03:00",
-                "Category": "exam",
-                "Status": "scheduled",
-                "Version": 1
-              }
-            ],
-            "error_code": "MODEL_INVALID_RESPONSE",
-            "error_contains": [
-              "segurança"
-            ]
-          }
         }
       ]
     },
     {
       "id": "rescheduling-clarify",
-      "description": "Responder clarify não altera o agendamento; confirmação antiga é revogada.",
+      "description": "Responder clarify não altera o agendamento.",
       "now": "2026-11-01T09:00:00-03:00",
       "timezone": "America/Sao_Paulo",
       "patient_id": "10000000-0000-0000-0000-000000000001",
@@ -2200,52 +2042,6 @@
                 "Status": "scheduled",
                 "Version": 1
               }
-            ]
-          }
-        },
-        {
-          "message": "Sim, confirmo.",
-          "responses": [
-            {
-              "tool_calls": [
-                {
-                  "id": "call",
-                  "name": "respond_to_proposal",
-                  "arguments": {
-                    "decision": "confirm"
-                  }
-                }
-              ]
-            }
-          ],
-          "expect": {
-            "tools": [
-              {
-                "name": "respond_to_proposal",
-                "arguments": {
-                  "decision": "confirm"
-                }
-              }
-            ],
-            "allowed_effects": [],
-            "appointments": 1,
-            "response": {},
-            "stored": [
-              {
-                "ID": "50000000-0000-0000-0000-000000000010",
-                "PatientID": "10000000-0000-0000-0000-000000000001",
-                "SlotID": "40000000-0000-0000-0000-000000000001",
-                "DoctorID": "30000000-0000-0000-0000-000000000001",
-                "DoctorName": "Dra. Ana Souza",
-                "StartsAt": "2026-11-04T14:00:00-03:00",
-                "Category": "exam",
-                "Status": "scheduled",
-                "Version": 1
-              }
-            ],
-            "error_code": "MODEL_INVALID_RESPONSE",
-            "error_contains": [
-              "segurança"
             ]
           }
         }
@@ -3242,7 +3038,7 @@
     },
     {
       "id": "cancellation-reject",
-      "description": "Responder reject não altera o agendamento; confirmação antiga é revogada.",
+      "description": "Responder reject não altera o agendamento.",
       "now": "2026-11-01T09:00:00-03:00",
       "timezone": "America/Sao_Paulo",
       "patient_id": "10000000-0000-0000-0000-000000000001",
@@ -3377,58 +3173,12 @@
               }
             ]
           }
-        },
-        {
-          "message": "Sim, confirmo.",
-          "responses": [
-            {
-              "tool_calls": [
-                {
-                  "id": "call",
-                  "name": "respond_to_proposal",
-                  "arguments": {
-                    "decision": "confirm"
-                  }
-                }
-              ]
-            }
-          ],
-          "expect": {
-            "tools": [
-              {
-                "name": "respond_to_proposal",
-                "arguments": {
-                  "decision": "confirm"
-                }
-              }
-            ],
-            "allowed_effects": [],
-            "appointments": 1,
-            "response": {},
-            "stored": [
-              {
-                "ID": "50000000-0000-0000-0000-000000000010",
-                "PatientID": "10000000-0000-0000-0000-000000000001",
-                "SlotID": "40000000-0000-0000-0000-000000000001",
-                "DoctorID": "30000000-0000-0000-0000-000000000001",
-                "DoctorName": "Dra. Ana Souza",
-                "StartsAt": "2026-11-04T14:00:00-03:00",
-                "Category": "exam",
-                "Status": "scheduled",
-                "Version": 1
-              }
-            ],
-            "error_code": "MODEL_INVALID_RESPONSE",
-            "error_contains": [
-              "segurança"
-            ]
-          }
         }
       ]
     },
     {
       "id": "cancellation-clarify",
-      "description": "Responder clarify não altera o agendamento; confirmação antiga é revogada.",
+      "description": "Responder clarify não altera o agendamento.",
       "now": "2026-11-01T09:00:00-03:00",
       "timezone": "America/Sao_Paulo",
       "patient_id": "10000000-0000-0000-0000-000000000001",
@@ -3561,52 +3311,6 @@
                 "Status": "scheduled",
                 "Version": 1
               }
-            ]
-          }
-        },
-        {
-          "message": "Sim, confirmo.",
-          "responses": [
-            {
-              "tool_calls": [
-                {
-                  "id": "call",
-                  "name": "respond_to_proposal",
-                  "arguments": {
-                    "decision": "confirm"
-                  }
-                }
-              ]
-            }
-          ],
-          "expect": {
-            "tools": [
-              {
-                "name": "respond_to_proposal",
-                "arguments": {
-                  "decision": "confirm"
-                }
-              }
-            ],
-            "allowed_effects": [],
-            "appointments": 1,
-            "response": {},
-            "stored": [
-              {
-                "ID": "50000000-0000-0000-0000-000000000010",
-                "PatientID": "10000000-0000-0000-0000-000000000001",
-                "SlotID": "40000000-0000-0000-0000-000000000001",
-                "DoctorID": "30000000-0000-0000-0000-000000000001",
-                "DoctorName": "Dra. Ana Souza",
-                "StartsAt": "2026-11-04T14:00:00-03:00",
-                "Category": "exam",
-                "Status": "scheduled",
-                "Version": 1
-              }
-            ],
-            "error_code": "MODEL_INVALID_RESPONSE",
-            "error_contains": [
-              "segurança"
             ]
           }
         }
@@ -6201,7 +5905,7 @@
     },
     {
       "id": "identity-argument-injection",
-      "description": "O modelo não pode escolher identidade por argumentos de consulta.",
+      "description": "Pedido para consultar outro paciente oferece equipe sem expor ou modificar reservas alheias.",
       "now": "2026-11-01T09:00:00-03:00",
       "timezone": "America/Sao_Paulo",
       "patient_id": "10000000-0000-0000-0000-000000000001",
@@ -6265,10 +5969,10 @@
             {
               "tool_calls": [
                 {
-                  "id": "call",
-                  "name": "list_appointments",
+                  "id": "contact",
+                  "name": "offer_human_contact",
                   "arguments": {
-                    "patient_id": "10000000-0000-0000-0000-000000000002"
+                    "reason": "out_of_scope"
                   }
                 }
               ]
@@ -6277,15 +5981,22 @@
           "expect": {
             "tools": [
               {
-                "name": "list_appointments",
+                "name": "offer_human_contact",
                 "arguments": {
-                  "patient_id": "10000000-0000-0000-0000-000000000002"
+                  "reason": "out_of_scope"
                 }
               }
             ],
             "allowed_effects": [],
             "appointments": 1,
-            "response": {},
+            "response": {
+              "pending_action": false,
+              "appointments": 0,
+              "absent": [
+                "50000000-0000-0000-0000-000000000011",
+                "05/11/2026"
+              ]
+            },
             "stored": [
               {
                 "ID": "50000000-0000-0000-0000-000000000010",
@@ -6298,10 +6009,6 @@
                 "Status": "scheduled",
                 "Version": 1
               }
-            ],
-            "error_code": "MODEL_INVALID_RESPONSE",
-            "error_contains": [
-              "segurança"
             ]
           }
         }
@@ -6648,39 +6355,6 @@
               "availability": false,
               "appointments": 0
             }
-          }
-        },
-        {
-          "message": "Sim, confirmo.",
-          "responses": [
-            {
-              "tool_calls": [
-                {
-                  "id": "call",
-                  "name": "respond_to_proposal",
-                  "arguments": {
-                    "decision": "confirm"
-                  }
-                }
-              ]
-            }
-          ],
-          "expect": {
-            "tools": [
-              {
-                "name": "respond_to_proposal",
-                "arguments": {
-                  "decision": "confirm"
-                }
-              }
-            ],
-            "allowed_effects": [],
-            "appointments": 0,
-            "response": {},
-            "error_code": "MODEL_INVALID_RESPONSE",
-            "error_contains": [
-              "segurança"
-            ]
           }
         }
       ],

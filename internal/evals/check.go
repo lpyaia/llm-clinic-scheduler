@@ -59,23 +59,8 @@ func check(turn TurnReport) []string {
 			*turn.Expected.Appointments, len(turn.Appointments)))
 	}
 
-	if turn.Expected.Stored != nil {
-		remaining := slices.Clone(turn.Appointments)
-		for _, expected := range turn.Expected.Stored {
-			index := slices.IndexFunc(remaining, func(row domain.Appointment) bool {
-				actual, _ := json.Marshal(row)
-				return matchesArguments(expected, actual)
-			})
-			if index < 0 {
-				failures = append(failures, fmt.Sprintf("stored appointment missing: %s", expected))
-			} else {
-				remaining = slices.Delete(remaining, index, index+1)
-			}
-		}
-
-		if len(remaining) > 0 {
-			failures = append(failures, "unexpected stored appointments")
-		}
+	if turn.Expected.Stored != nil && !storedAppointmentsMatch(turn.Expected.Stored, turn.Appointments) {
+		failures = append(failures, "stored appointment set mismatch")
 	}
 
 	response := turn.Expected.Response
@@ -164,4 +149,51 @@ func effects(before, after []domain.Appointment) []string {
 	}
 
 	return out
+}
+
+// Match distinct records with reassignment: a broad subset must not consume the only
+// appointment matching a later, narrower expectation.
+func storedAppointmentsMatch(expected []json.RawMessage, actual []domain.Appointment) bool {
+	if len(expected) != len(actual) {
+		return false
+	}
+
+	candidates := make([][]int, len(expected))
+	for i, want := range expected {
+		for j, row := range actual {
+			encoded, _ := json.Marshal(row)
+			if matchesArguments(want, encoded) {
+				candidates[i] = append(candidates[i], j)
+			}
+		}
+	}
+
+	assigned := make([]int, len(actual))
+	for i := range assigned {
+		assigned[i] = -1
+	}
+
+	for i := range expected {
+		if !assignAppointment(i, candidates, assigned, make([]bool, len(actual))) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func assignAppointment(expected int, candidates [][]int, assigned []int, visited []bool) bool {
+	for _, actual := range candidates[expected] {
+		if visited[actual] {
+			continue
+		}
+
+		visited[actual] = true
+		if assigned[actual] < 0 || assignAppointment(assigned[actual], candidates, assigned, visited) {
+			assigned[actual] = expected
+			return true
+		}
+	}
+
+	return false
 }

@@ -32,7 +32,7 @@ conversa; erros inesperados interrompem o cenário, e os demais cenários contin
 
 ## Cobertura dos comportamentos da V2 (#19)
 
-O dataset padrão contém 46 cenários manuais em português, com 124 turnos. Cada cenário declara condições iniciais,
+O dataset padrão contém 46 cenários manuais em português, com 116 turnos. Cada cenário declara condições iniciais,
 paciente autenticado, relógio, fuso e uma descrição do critério de aprovação. As expectativas de cada turno são
 conjuntivas: todas precisam passar, incluindo ausência de efeitos em preparação, recusa e ambiguidade.
 As respostas simuladas representam decisões esperadas do modelo; a execução real usa as mesmas mensagens e expectativas.
@@ -68,6 +68,10 @@ New-Item -ItemType Directory -Force .scratch | Out-Null
 go run ./cmd/eval -output .scratch/eval-v2.json
 go run ./cmd/eval -mode replay -replay .scratch/eval-v2.json -output .scratch/eval-v2-replayed.json
 ```
+
+Os testes determinísticos de guardas injetam saídas inválidas do modelo: argumentos de identidade proibidos,
+confirmação sem proposta, preparação e confirmação no mesmo turno e tentativa de confirmar após revogação.
+Essas injeções não fazem parte das decisões esperadas do corpus usado com o modelo real, que deve agir com segurança.
 
 O resultado esperado nos dois comandos é `passed=46 failed=0 errors=0`. Duas execuções em modo `scripted` produzem
 relatórios idênticos; o replay conserva cenários, prompts, decisões e efeitos, com configuração de origem registrada.
