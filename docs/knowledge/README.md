@@ -52,6 +52,25 @@ O comando apresenta trechos recuperados, sem compor uma resposta clínica ou apl
 Guarde o `id` retornado para pesquisar após reiniciar o processo. Cada importação cria um documento novo e imutável;
 reimportar não substitui documentos anteriores. A busca usa somente o documento escolhido.
 
+## FAQ fictício de convênios
+
+O arquivo [faq-convenios-simulated.md](faq-convenios-simulated.md) apresenta planos inventados, modalidades de
+atendimento, documentos, autorização, coparticipação e reembolso. Todas as condições fazem parte da demonstração.
+Importe esse arquivo separadamente e use o ID retornado para consultar seus trechos:
+
+```powershell
+$convenios = go run ./cmd/knowledge ingest -file docs/knowledge/faq-convenios-simulated.md | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0) { throw 'Falha na ingestão do FAQ de convênios' }
+
+go run ./cmd/knowledge search -document $convenios.id -question 'Quais planos vocês aceitam?' -limit 3
+go run ./cmd/knowledge search -document $convenios.id -question 'O Ipê Azul Básico inclui exames?' -limit 3
+go run ./cmd/knowledge search -document $convenios.id -question 'Meu plano não está na lista. Posso pagar?' -limit 3
+```
+
+Confira, respectivamente, os trechos sobre convênios aceitos, cobertura do Ipê Azul Básico e atendimento particular.
+Perguntas sem valor definido no FAQ, como o preço da coparticipação, devem recuperar a orientação de consulta à
+recepção; o documento não fornece um valor para ser inferido. O comando continua apresentando somente trechos.
+
 ## Extração, chunking e falhas
 
 - Formatos aceitos: `.md` e `.txt`, UTF-8, até 64 KiB. PDF, binários, UTF-8 inválido, falha de leitura ou excesso de
