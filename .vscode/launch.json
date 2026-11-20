@@ -54,6 +54,30 @@
         "COMMAND_TIMEOUT": "0s"
       },
       "console": "integratedTerminal"
+    },
+    {
+      "name": "Go: knowledge",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "debugAdapter": "dlv-dap",
+      "program": "${workspaceFolder}/cmd/knowledge",
+      "cwd": "${workspaceFolder}",
+      "args": "${input:knowledgeArgs}",
+      "envFile": "${workspaceFolder}/.env",
+      "env": {
+        "HTTP_REQUEST_TIMEOUT": "0s",
+        "COMMAND_TIMEOUT": "0s"
+      },
+      "console": "integratedTerminal"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "knowledgeArgs",
+      "type": "promptString",
+      "description": "Enter command-line arguments",
+      "default": ""
     }
   ]
 }
