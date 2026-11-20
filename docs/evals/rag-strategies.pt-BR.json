@@ -1,0 +1,232 @@
+{
+  "version": 1,
+  "corpus_id": "strategy-comparison-simulated-v1",
+  "documents": [
+    {
+      "source": "acesso.md",
+      "lines": [
+        "# Acesso à unidade central fictícia",
+        "",
+        "O estacionamento fica na entrada lateral da unidade central.",
+        "O estacionamento é gratuito durante o atendimento.",
+        "A entrada de veículos funciona durante o horário de atendimento da unidade.",
+        "Ao chegar, siga a sinalização interna e procure a equipe de apoio quando precisar de orientação.",
+        "A reserva de horário de consulta não corresponde à reserva de vaga para o veículo.",
+        "O paciente deve guardar seus pertences e observar a sinalização das áreas de circulação.",
+        "",
+        "A rampa de acesso fica ao lado da recepção principal.",
+        "A circulação entre a rampa e a recepção deve permanecer livre para a passagem de pessoas.",
+        "A equipe de apoio pode orientar o trajeto entre a entrada e o balcão de cadastro.",
+        "O acompanhante deve aguardar a orientação da recepção antes de seguir para a área de atendimento.",
+        "Este material descreve a unidade central; outras unidades podem ter rotas de acesso diferentes.",
+        "",
+        "A entrada de pedestres é identificada pela placa da recepção principal.",
+        "Entregas e serviços de manutenção usam a entrada de serviço, conforme orientação da equipe.",
+        "Este guia não define disponibilidade de horários médicos nem permite confirmar uma consulta.",
+        "Informações sobre reservas devem ser consultadas no sistema de agendamento da clínica.",
+        "Os dados deste documento são simulados e servem somente à comparação de recuperação documental."
+      ],
+      "metadata": {
+        "topic": "general"
+      }
+    },
+    {
+      "source": "visita.md",
+      "lines": [
+        "# Cadastro e chegada na unidade fictícia",
+        "",
+        "Traga um documento oficial com foto e o pedido do exame.",
+        "Apresente o cartão do convênio quando solicitar atendimento pelo plano.",
+        "A equipe confere os dados apresentados antes de encaminhar o paciente para o atendimento.",
+        "Se algum dado cadastral estiver desatualizado, informe a correção à recepção na chegada.",
+        "O nome usado na reserva deve corresponder ao documento apresentado para a identificação.",
+        "Este roteiro de documentos não substitui a confirmação de cobertura junto ao convênio.",
+        "",
+        "Chegue com quinze minutos de antecedência para o cadastro.",
+        "A antecedência indicada permite conferir documentos e atualizar os dados necessários.",
+        "A ordem de chamada depende do horário reservado e da orientação da equipe responsável.",
+        "Em caso de atraso, procure a recepção para verificar as possibilidades para o atendimento.",
+        "A chegada antecipada não garante que a consulta comece antes do horário agendado.",
+        "",
+        "A recepção informa onde aguardar após concluir o cadastro.",
+        "Não é necessário circular pelas salas de atendimento para confirmar a chegada.",
+        "Os acompanhantes devem respeitar as orientações locais sobre circulação e permanência.",
+        "Este documento não apresenta diagnóstico, recomendação clínica ou disponibilidade de vagas.",
+        "As informações são fictícias e foram escritas exclusivamente para esta avaliação."
+      ],
+      "metadata": {
+        "topic": "general"
+      }
+    },
+    {
+      "source": "preparo.md",
+      "lines": [
+        "# Roteiro fictício de preparo do ultrassom abdominal",
+        "",
+        "Para o ultrassom abdominal, este roteiro fictício prevê jejum de seis horas.",
+        "Esse exemplo pertence somente ao cenário simulado de ultrassom abdominal deste dataset.",
+        "O nome completo do exame deve ser conferido no pedido antes de consultar o roteiro correspondente.",
+        "Outras modalidades de ultrassom podem ter orientações diferentes e não estão descritas aqui.",
+        "Informações de cadastro e documentos devem ser consultadas no guia de chegada da unidade.",
+        "",
+        "A orientação deve ser confirmada pela equipe responsável antes do exame.",
+        "Este roteiro não orienta mudanças de medicação nem substitui instruções individuais da equipe.",
+        "Dúvidas sobre condições pessoais devem ser encaminhadas ao profissional responsável.",
+        "A recepção pode ajudar a localizar o canal de contato correto para confirmar as instruções.",
+        "A confirmação do preparo não equivale à confirmação de um horário disponível para atendimento.",
+        "",
+        "O paciente deve conferir a unidade e a modalidade registradas no agendamento.",
+        "A equipe deve ser informada quando o pedido estiver ilegível ou tiver identificação incompleta.",
+        "Este documento não descreve preparo de procedimentos invasivos ou de outras modalidades de exame.",
+        "O conteúdo é fictício e não deve ser usado como orientação de saúde fora desta avaliação."
+      ],
+      "metadata": {
+        "topic": "preparation",
+        "exam": "Ultrassom abdominal"
+      }
+    },
+    {
+      "source": "convenio.md",
+      "lines": [
+        "# Conferência administrativa do convênio fictício",
+        "",
+        "A autorização do convênio deve estar válida na data do exame.",
+        "O paciente deve conferir os dados da autorização com o pedido e com o atendimento solicitado.",
+        "Alterações na modalidade do exame podem exigir uma nova análise administrativa da solicitação.",
+        "A existência de uma reserva no sistema não comprova que uma autorização foi emitida pelo plano.",
+        "Leve os documentos solicitados para que a equipe possa conferir a identificação no cadastro.",
+        "",
+        "A confirmação da cobertura é feita pela recepção antes do atendimento.",
+        "O convênio pode exigir informações adicionais para concluir a conferência da cobertura.",
+        "A autorização e a confirmação de cobertura são etapas diferentes da escolha de um horário.",
+        "Em caso de divergência nos dados, procure a recepção para orientação administrativa.",
+        "Este material não contém uma lista de planos aceitos ou preços particulares de exames.",
+        "",
+        "As regras apresentadas neste documento existem somente no acervo simulado da avaliação.",
+        "Não use uma confirmação documental para criar ou alterar uma reserva automaticamente.",
+        "As regras de validade das ações de agendamento continuam pertencendo ao sistema de reservas.",
+        "Atualizações de contato devem ser confirmadas pela equipe antes de encaminhar documentos pessoais.",
+        "Esta página não informa procedimentos clínicos, decisões médicas ou recomendações de tratamento."
+      ],
+      "metadata": {
+        "topic": "insurance"
+      }
+    }
+  ],
+  "questions": [
+    {
+      "id": "parking",
+      "text": "O estacionamento é gratuito?",
+      "reference": "O estacionamento é gratuito durante o atendimento.",
+      "expected": [
+        {
+          "source": "acesso.md",
+          "text": "O estacionamento é gratuito durante o atendimento."
+        }
+      ]
+    },
+    {
+      "id": "ramp",
+      "text": "Onde fica a rampa de acesso?",
+      "reference": "Ao lado da recepção principal.",
+      "expected": [
+        {
+          "source": "acesso.md",
+          "text": "A rampa de acesso fica ao lado da recepção principal."
+        }
+      ]
+    },
+    {
+      "id": "documents",
+      "text": "Quais documentos devo levar para um exame pelo convênio?",
+      "reference": "Documento oficial com foto, pedido do exame e cartão do convênio.",
+      "expected": [
+        {
+          "source": "visita.md",
+          "text": "Traga um documento oficial com foto e o pedido do exame."
+        },
+        {
+          "source": "visita.md",
+          "text": "Apresente o cartão do convênio quando solicitar atendimento pelo plano."
+        }
+      ]
+    },
+    {
+      "id": "arrival",
+      "text": "Com qual antecedência devo chegar para o cadastro?",
+      "reference": "Quinze minutos antes do horário.",
+      "expected": [
+        {
+          "source": "visita.md",
+          "text": "Chegue com quinze minutos de antecedência para o cadastro."
+        }
+      ]
+    },
+    {
+      "id": "two-sources",
+      "text": "Posso usar estacionamento gratuito e que documento devo levar para o exame?",
+      "reference": "Estacionamento gratuito durante o atendimento; documento oficial com foto e pedido do exame.",
+      "expected": [
+        {
+          "source": "acesso.md",
+          "text": "O estacionamento é gratuito durante o atendimento."
+        },
+        {
+          "source": "visita.md",
+          "text": "Traga um documento oficial com foto e o pedido do exame."
+        }
+      ]
+    },
+    {
+      "id": "preparation",
+      "text": "Neste roteiro fictício, qual é o jejum do ultrassom abdominal e quem confirma a orientação?",
+      "reference": "O roteiro prevê seis horas de jejum e exige confirmação da equipe responsável.",
+      "filter": {
+        "topic": "preparation",
+        "exam": "Ultrassom abdominal"
+      },
+      "expected": [
+        {
+          "source": "preparo.md",
+          "text": "Para o ultrassom abdominal, este roteiro fictício prevê jejum de seis horas."
+        },
+        {
+          "source": "preparo.md",
+          "text": "A orientação deve ser confirmada pela equipe responsável antes do exame."
+        }
+      ]
+    },
+    {
+      "id": "insurance",
+      "text": "Quando a autorização do convênio precisa estar válida e quem confirma a cobertura?",
+      "reference": "Válida na data do exame; a recepção confirma a cobertura antes do atendimento.",
+      "filter": {
+        "topic": "insurance"
+      },
+      "expected": [
+        {
+          "source": "convenio.md",
+          "text": "A autorização do convênio deve estar válida na data do exame."
+        },
+        {
+          "source": "convenio.md",
+          "text": "A confirmação da cobertura é feita pela recepção antes do atendimento."
+        }
+      ]
+    },
+    {
+      "id": "pool",
+      "text": "A unidade tem piscina?",
+      "reference": "Abster-se: o acervo não informa se existe piscina.",
+      "no_answer": true,
+      "expected": []
+    },
+    {
+      "id": "height",
+      "text": "Qual é a altura máxima de veículos no estacionamento?",
+      "reference": "Abster-se: o acervo não informa um limite de altura.",
+      "no_answer": true,
+      "expected": []
+    }
+  ]
+}

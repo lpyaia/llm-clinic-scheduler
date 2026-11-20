@@ -84,6 +84,8 @@ type Chunk struct {
 	StartLine, EndLine int
 	Vector             []float32
 	Page               int
+	// Rune offsets are half-open within normalized document text, or within a PDF page.
+	StartRune, EndRune int
 }
 
 type Result struct {
@@ -121,9 +123,12 @@ type Service struct {
 	repo     Repository
 	embedder Embedder
 	config   EmbeddingConfig
+	chunking Chunking
 }
 
-func New(repo Repository, embedder Embedder, config EmbeddingConfig) (*Service, error) {
+// New keeps the default paragraph policy unless one chunking configuration is supplied.
+// Custom policies require a separately rebuilt corpus; chunking is not persisted as embedding configuration.
+func New(repo Repository, embedder Embedder, config EmbeddingConfig, chunking ...Chunking) (*Service, error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
@@ -132,7 +137,21 @@ func New(repo Repository, embedder Embedder, config EmbeddingConfig) (*Service, 
 		return nil, ErrConfiguration
 	}
 
-	return &Service{repo: repo, embedder: embedder, config: config}, nil
+	if len(chunking) > 1 {
+		return nil, ErrInput
+	}
+
+	var selected Chunking
+	if len(chunking) == 1 {
+		selected = chunking[0]
+	}
+
+	selected, err := selected.Normalize()
+	if err != nil {
+		return nil, err
+	}
+
+	return &Service{repo: repo, embedder: embedder, config: config, chunking: selected}, nil
 }
 
 // Ingest accepts optional metadata for compatibility with existing unclassified documents.
@@ -154,7 +173,7 @@ func (s *Service) Ingest(ctx context.Context, source string, input io.Reader, me
 		meta.Topic = "general"
 	}
 
-	content, chunks, err := extractDocument(ctx, source, input)
+	content, chunks, err := extractDocument(ctx, source, input, s.chunking)
 	if err != nil {
 		return Document{}, err
 	}

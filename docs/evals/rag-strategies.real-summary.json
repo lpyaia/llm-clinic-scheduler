@@ -1,0 +1,693 @@
+{
+  "dataset_sha256": "e1bd97f5ca7aee908dbf2b2f6148f73c9304a8ad6e568ef255ad2487e60da3fa",
+  "matrix_sha256": "09d8a32fa4d1b11269e56727d82f5dabe1ef16decacaa487c2c58c3cd0091e22",
+  "settings": {
+    "mode": "real",
+    "embedding": {
+      "provider": "openai",
+      "model": "text-embedding-3-small",
+      "dimensions": 1536
+    },
+    "generation": {
+      "provider": "openai",
+      "model": "gpt-6-luna",
+      "settings": {
+        "endpoint": "https://api.openai.com/v1/chat/completions",
+        "max_completion_tokens": 2048,
+        "reasoning_effort": "none",
+        "parallel_tool_calls": false,
+        "store": false,
+        "http_timeout": "45s"
+      }
+    },
+    "code_revision": "d622ce1d7a52891004f48ebf2af7b13a8e17db58",
+    "dirty": true,
+    "timeout": "10m0s"
+  },
+  "executable_sha256": "85531d5a6027211c2a046d7cc4f265ade84054ba9b3eb828bcfb12140f1bbc2d",
+  "corpus_id": "strategy-comparison-simulated-v1",
+  "scenario_count": 9,
+  "reranking": "none",
+  "cells": [
+    {
+      "index_id": "68fd953bf759d293ac0b853aebf5b6a8f3855526bb4c948eb2443b3a4294d740",
+      "index_sha256": "86c0e87f7d777a6eb00486f43dce47e81ed5669aec88baf5de71865fefa2c9a8",
+      "chunking": {
+        "strategy": "paragraphs",
+        "max_runes": 600,
+        "overlap": 0
+      },
+      "k": 1,
+      "chunk_count": 16,
+      "metrics": {
+        "recall": {
+          "value": 0.7857142857142857,
+          "count": 7
+        },
+        "groundedness": {
+          "value": 1,
+          "count": 7
+        },
+        "answer_correct": {
+          "value": 0.6666666666666666,
+          "count": 9
+        },
+        "citation_correctness": {
+          "value": 1,
+          "count": 7
+        },
+        "abstention_correct": {
+          "value": 1,
+          "count": 9
+        },
+        "unsupported_claims": 0,
+        "passed": 6,
+        "failed": 3,
+        "errors": 0
+      },
+      "scenarios": [
+        {
+          "id": "parking",
+          "status": "passed",
+          "recall": 1,
+          "answer_correct": true,
+          "groundedness": 1,
+          "citation_correctness": 1,
+          "abstention_correct": true,
+          "retrieved_count": 1,
+          "selected_claim_count": 1,
+          "missing_reference_sources": [
+            null
+          ]
+        },
+        {
+          "id": "ramp",
+          "status": "passed",
+          "recall": 1,
+          "answer_correct": true,
+          "groundedness": 1,
+          "citation_correctness": 1,
+          "abstention_correct": true,
+          "retrieved_count": 1,
+          "selected_claim_count": 1,
+          "missing_reference_sources": [
+            null
+          ]
+        },
+        {
+          "id": "documents",
+          "status": "passed",
+          "recall": 1,
+          "answer_correct": true,
+          "groundedness": 1,
+          "citation_correctness": 1,
+          "abstention_correct": true,
+          "retrieved_count": 1,
+          "selected_claim_count": 1,
+          "missing_reference_sources": [
+            null
+          ]
+        },
+        {
+          "id": "arrival",
+          "status": "passed",
+          "recall": 1,
+          "answer_correct": true,
+          "groundedness": 1,
+          "citation_correctness": 1,
+          "abstention_correct": true,
+          "retrieved_count": 1,
+          "selected_claim_count": 1,
+          "missing_reference_sources": [
+            null
+          ]
+        },
+        {
+          "id": "two-sources",
+          "status": "failed",
+          "recall": 0.5,
+          "answer_correct": false,
+          "groundedness": 1,
+          "citation_correctness": 1,
+          "abstention_correct": true,
+          "retrieved_count": 1,
+          "selected_claim_count": 1,
+          "missing_reference_sources": [
+            "visita.md"
+          ]
+        },
+        {
+          "id": "preparation",
+          "status": "failed",
+          "recall": 0.5,
+          "answer_correct": false,
+          "groundedness": 1,
+          "citation_correctness": 1,
+          "abstention_correct": true,
+          "retrieved_count": 1,
+          "selected_claim_count": 1,
+          "missing_reference_sources": [
+            "preparo.md"
+          ]
+        },
+        {
+          "id": "insurance",
+          "status": "failed",
+          "recall": 0.5,
+          "answer_correct": false,
+          "groundedness": 1,
+          "citation_correctness": 1,
+          "abstention_correct": true,
+          "retrieved_count": 1,
+          "selected_claim_count": 1,
+          "missing_reference_sources": [
+            "convenio.md"
+          ]
+        },
+        {
+          "id": "pool",
+          "status": "passed",
+          "recall": null,
+          "answer_correct": true,
+          "groundedness": null,
+          "citation_correctness": null,
+          "abstention_correct": true,
+          "retrieved_count": 1,
+          "selected_claim_count": 0,
+          "missing_reference_sources": [
+            null
+          ]
+        },
+        {
+          "id": "height",
+          "status": "passed",
+          "recall": null,
+          "answer_correct": true,
+          "groundedness": null,
+          "citation_correctness": null,
+          "abstention_correct": true,
+          "retrieved_count": 1,
+          "selected_claim_count": 0,
+          "missing_reference_sources": [
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "index_id": "437e9e9b6de47946a5bfe9c566353994756a71944225f242cd76e4c4612dddaf",
+      "index_sha256": "3ddcbe5c3a58430821495c7d7bcd3b3d66fb8aed9415078502b174fcb6a38187",
+      "chunking": {
+        "strategy": "paragraphs",
+        "max_runes": 600,
+        "overlap": 0
+      },
+      "k": 3,
+      "chunk_count": 16,
+      "metrics": {
+        "recall": {
+          "value": 0.9285714285714286,
+          "count": 7
+        },
+        "groundedness": {
+          "value": 1,
+          "count": 7
+        },
+        "answer_correct": {
+          "value": 0.7777777777777778,
+          "count": 9
+        },
+        "citation_correctness": {
+          "value": 1,
+          "count": 7
+        },
+        "abstention_correct": {
+          "value": 1,
+          "count": 9
+        },
+        "unsupported_claims": 0,
+        "passed": 7,
+        "failed": 2,
+        "errors": 0
+      },
+      "scenarios": [
+        {
+          "id": "parking",
+          "status": "passed",
+          "recall": 1,
+          "answer_correct": true,
+          "groundedness": 1,
+          "citation_correctness": 1,
+          "abstention_correct": true,
+          "retrieved_count": 3,
+          "selected_claim_count": 1,
+          "missing_reference_sources": [
+            null
+          ]
+        },
+        {
+          "id": "ramp",
+          "status": "passed",
+          "recall": 1,
+          "answer_correct": true,
+          "groundedness": 1,
+          "citation_correctness": 1,
+          "abstention_correct": true,
+          "retrieved_count": 3,
+          "selected_claim_count": 1,
+          "missing_reference_sources": [
+            null
+          ]
+        },
+        {
+          "id": "documents",
+          "status": "failed",
+          "recall": 1,
+          "answer_correct": false,
+          "groundedness": 1,
+          "citation_correctness": 1,
+          "abstention_correct": true,
+          "retrieved_count": 3,
+          "selected_claim_count": 2,
+          "missing_reference_sources": [
+            null
+          ]
+        },
+        {
+          "id": "arrival",
+          "status": "passed",
+          "recall": 1,
+          "answer_correct": true,
+          "groundedness": 1,
+          "citation_correctness": 1,
+          "abstention_correct": true,
+          "retrieved_count": 3,
+          "selected_claim_count": 1,
+          "missing_reference_sources": [
+            null
+          ]
+        },
+        {
+          "id": "two-sources",
+          "status": "passed",
+          "recall": 1,
+          "answer_correct": true,
+          "groundedness": 1,
+          "citation_correctness": 1,
+          "abstention_correct": true,
+          "retrieved_count": 3,
+          "selected_claim_count": 2,
+          "missing_reference_sources": [
+            null
+          ]
+        },
+        {
+          "id": "preparation",
+          "status": "failed",
+          "recall": 0.5,
+          "answer_correct": false,
+          "groundedness": 1,
+          "citation_correctness": 1,
+          "abstention_correct": true,
+          "retrieved_count": 3,
+          "selected_claim_count": 1,
+          "missing_reference_sources": [
+            "preparo.md"
+          ]
+        },
+        {
+          "id": "insurance",
+          "status": "passed",
+          "recall": 1,
+          "answer_correct": true,
+          "groundedness": 1,
+          "citation_correctness": 1,
+          "abstention_correct": true,
+          "retrieved_count": 3,
+          "selected_claim_count": 2,
+          "missing_reference_sources": [
+            null
+          ]
+        },
+        {
+          "id": "pool",
+          "status": "passed",
+          "recall": null,
+          "answer_correct": true,
+          "groundedness": null,
+          "citation_correctness": null,
+          "abstention_correct": true,
+          "retrieved_count": 3,
+          "selected_claim_count": 0,
+          "missing_reference_sources": [
+            null
+          ]
+        },
+        {
+          "id": "height",
+          "status": "passed",
+          "recall": null,
+          "answer_correct": true,
+          "groundedness": null,
+          "citation_correctness": null,
+          "abstention_correct": true,
+          "retrieved_count": 3,
+          "selected_claim_count": 0,
+          "missing_reference_sources": [
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "index_id": "6c21790389ca76d3f7093c0ca4250e90f3f1a59c454140bb17880a4afab688cc",
+      "index_sha256": "8d60c2bec5d037000f04564a6d86d5d621573f5a8341d487bb82895bca17f0e7",
+      "chunking": {
+        "strategy": "windows",
+        "max_runes": 300,
+        "overlap": 60
+      },
+      "k": 1,
+      "chunk_count": 24,
+      "metrics": {
+        "recall": {
+          "value": 0.7857142857142857,
+          "count": 7
+        },
+        "groundedness": {
+          "value": 1,
+          "count": 6
+        },
+        "answer_correct": {
+          "value": 0.6666666666666666,
+          "count": 9
+        },
+        "citation_correctness": {
+          "value": 1,
+          "count": 6
+        },
+        "abstention_correct": {
+          "value": 0.8888888888888888,
+          "count": 9
+        },
+        "unsupported_claims": 0,
+        "passed": 6,
+        "failed": 3,
+        "errors": 0
+      },
+      "scenarios": [
+        {
+          "id": "parking",
+          "status": "passed",
+          "recall": 1,
+          "answer_correct": true,
+          "groundedness": 1,
+          "citation_correctness": 1,
+          "abstention_correct": true,
+          "retrieved_count": 1,
+          "selected_claim_count": 1,
+          "missing_reference_sources": [
+            null
+          ]
+        },
+        {
+          "id": "ramp",
+          "status": "passed",
+          "recall": 1,
+          "answer_correct": true,
+          "groundedness": 1,
+          "citation_correctness": 1,
+          "abstention_correct": true,
+          "retrieved_count": 1,
+          "selected_claim_count": 1,
+          "missing_reference_sources": [
+            null
+          ]
+        },
+        {
+          "id": "documents",
+          "status": "passed",
+          "recall": 1,
+          "answer_correct": true,
+          "groundedness": 1,
+          "citation_correctness": 1,
+          "abstention_correct": true,
+          "retrieved_count": 1,
+          "selected_claim_count": 1,
+          "missing_reference_sources": [
+            null
+          ]
+        },
+        {
+          "id": "arrival",
+          "status": "passed",
+          "recall": 1,
+          "answer_correct": true,
+          "groundedness": 1,
+          "citation_correctness": 1,
+          "abstention_correct": true,
+          "retrieved_count": 1,
+          "selected_claim_count": 1,
+          "missing_reference_sources": [
+            null
+          ]
+        },
+        {
+          "id": "two-sources",
+          "status": "failed",
+          "recall": 0.5,
+          "answer_correct": false,
+          "groundedness": 1,
+          "citation_correctness": 1,
+          "abstention_correct": true,
+          "retrieved_count": 1,
+          "selected_claim_count": 1,
+          "missing_reference_sources": [
+            "visita.md"
+          ]
+        },
+        {
+          "id": "preparation",
+          "status": "failed",
+          "recall": 0.5,
+          "answer_correct": false,
+          "groundedness": 1,
+          "citation_correctness": 1,
+          "abstention_correct": true,
+          "retrieved_count": 1,
+          "selected_claim_count": 1,
+          "missing_reference_sources": [
+            "preparo.md"
+          ]
+        },
+        {
+          "id": "insurance",
+          "status": "failed",
+          "recall": 0.5,
+          "answer_correct": false,
+          "groundedness": null,
+          "citation_correctness": null,
+          "abstention_correct": false,
+          "retrieved_count": 1,
+          "selected_claim_count": 0,
+          "missing_reference_sources": [
+            "convenio.md"
+          ]
+        },
+        {
+          "id": "pool",
+          "status": "passed",
+          "recall": null,
+          "answer_correct": true,
+          "groundedness": null,
+          "citation_correctness": null,
+          "abstention_correct": true,
+          "retrieved_count": 1,
+          "selected_claim_count": 0,
+          "missing_reference_sources": [
+            null
+          ]
+        },
+        {
+          "id": "height",
+          "status": "passed",
+          "recall": null,
+          "answer_correct": true,
+          "groundedness": null,
+          "citation_correctness": null,
+          "abstention_correct": true,
+          "retrieved_count": 1,
+          "selected_claim_count": 0,
+          "missing_reference_sources": [
+            null
+          ]
+        }
+      ]
+    },
+    {
+      "index_id": "fb6bac0a49c6fae31c707ee1538398c2f1dee04c135cbf67ae94b4606588c36b",
+      "index_sha256": "f303024a16e8af88eccee3acd8c2e294c669b6d9da046fe5e71e4645c9fa6541",
+      "chunking": {
+        "strategy": "windows",
+        "max_runes": 300,
+        "overlap": 60
+      },
+      "k": 3,
+      "chunk_count": 24,
+      "metrics": {
+        "recall": {
+          "value": 1,
+          "count": 7
+        },
+        "groundedness": {
+          "value": 1,
+          "count": 7
+        },
+        "answer_correct": {
+          "value": 0.8888888888888888,
+          "count": 9
+        },
+        "citation_correctness": {
+          "value": 1,
+          "count": 7
+        },
+        "abstention_correct": {
+          "value": 1,
+          "count": 9
+        },
+        "unsupported_claims": 0,
+        "passed": 8,
+        "failed": 1,
+        "errors": 0
+      },
+      "scenarios": [
+        {
+          "id": "parking",
+          "status": "passed",
+          "recall": 1,
+          "answer_correct": true,
+          "groundedness": 1,
+          "citation_correctness": 1,
+          "abstention_correct": true,
+          "retrieved_count": 3,
+          "selected_claim_count": 1,
+          "missing_reference_sources": [
+            null
+          ]
+        },
+        {
+          "id": "ramp",
+          "status": "passed",
+          "recall": 1,
+          "answer_correct": true,
+          "groundedness": 1,
+          "citation_correctness": 1,
+          "abstention_correct": true,
+          "retrieved_count": 3,
+          "selected_claim_count": 1,
+          "missing_reference_sources": [
+            null
+          ]
+        },
+        {
+          "id": "documents",
+          "status": "failed",
+          "recall": 1,
+          "answer_correct": false,
+          "groundedness": 1,
+          "citation_correctness": 1,
+          "abstention_correct": true,
+          "retrieved_count": 3,
+          "selected_claim_count": 2,
+          "missing_reference_sources": [
+            null
+          ]
+        },
+        {
+          "id": "arrival",
+          "status": "passed",
+          "recall": 1,
+          "answer_correct": true,
+          "groundedness": 1,
+          "citation_correctness": 1,
+          "abstention_correct": true,
+          "retrieved_count": 3,
+          "selected_claim_count": 1,
+          "missing_reference_sources": [
+            null
+          ]
+        },
+        {
+          "id": "two-sources",
+          "status": "passed",
+          "recall": 1,
+          "answer_correct": true,
+          "groundedness": 1,
+          "citation_correctness": 1,
+          "abstention_correct": true,
+          "retrieved_count": 3,
+          "selected_claim_count": 2,
+          "missing_reference_sources": [
+            null
+          ]
+        },
+        {
+          "id": "preparation",
+          "status": "passed",
+          "recall": 1,
+          "answer_correct": true,
+          "groundedness": 1,
+          "citation_correctness": 1,
+          "abstention_correct": true,
+          "retrieved_count": 3,
+          "selected_claim_count": 2,
+          "missing_reference_sources": [
+            null
+          ]
+        },
+        {
+          "id": "insurance",
+          "status": "passed",
+          "recall": 1,
+          "answer_correct": true,
+          "groundedness": 1,
+          "citation_correctness": 1,
+          "abstention_correct": true,
+          "retrieved_count": 3,
+          "selected_claim_count": 2,
+          "missing_reference_sources": [
+            null
+          ]
+        },
+        {
+          "id": "pool",
+          "status": "passed",
+          "recall": null,
+          "answer_correct": true,
+          "groundedness": null,
+          "citation_correctness": null,
+          "abstention_correct": true,
+          "retrieved_count": 3,
+          "selected_claim_count": 0,
+          "missing_reference_sources": [
+            null
+          ]
+        },
+        {
+          "id": "height",
+          "status": "passed",
+          "recall": null,
+          "answer_correct": true,
+          "groundedness": null,
+          "citation_correctness": null,
+          "abstention_correct": true,
+          "retrieved_count": 3,
+          "selected_claim_count": 0,
+          "missing_reference_sources": [
+            null
+          ]
+        }
+      ]
+    }
+  ]
+}

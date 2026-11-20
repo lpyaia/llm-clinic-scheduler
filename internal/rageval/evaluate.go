@@ -67,42 +67,25 @@ func evaluateScenario(dataset Dataset, scenario Scenario, observation Observatio
 		return result
 	}
 
-	claims := parseClaims(message, dataset.Corpus)
+	assessment := AssessEvidence(dataset.Corpus, observation.Retrieved, message)
+	result.Groundedness, result.CitationCorrectness = assessment.Groundedness, assessment.CitationCorrectness
+	result.UnsupportedClaims, result.Failures = assessment.UnsupportedClaims, assessment.Failures
 	matched := make(map[string]bool)
-	supported, cited := 0, 0
 	allRelevant := true
 
-	for _, claim := range claims {
-		isSupported := false
+	for _, claim := range assessment.Claims {
 		isRelevant := false
 
-		for _, row := range dataset.Corpus {
-			if claim.text == strings.TrimSpace(row.Text) {
-				if slices.Contains(scenario.ExpectedEvidence, evidenceID(row)) {
-					matched[evidenceID(row)] = true
+		for _, id := range claim.Evidence {
+			for _, expected := range scenario.ExpectedEvidence {
+				if id == expected {
+					matched[id] = true
 					isRelevant = true
 				}
-
-				isSupported = isSupported || slices.Contains(observation.Retrieved, evidenceID(row))
 			}
 		}
 
 		allRelevant = allRelevant && isRelevant
-
-		if isSupported {
-			supported++
-		} else {
-			result.UnsupportedClaims = append(result.UnsupportedClaims, claim.text)
-			result.Failures = append(result.Failures, Failure{Kind: "unsupported_claim", Claim: claim.text})
-		}
-
-		if failure := checkCitation(claim, dataset.Corpus, observation.Retrieved); failure != "" {
-			result.Failures = append(result.Failures, Failure{
-				Kind: failure, Claim: claim.text, Citation: claim.citation,
-			})
-		} else {
-			cited++
-		}
 	}
 
 	correct := len(matched) == len(scenario.ExpectedEvidence) && allRelevant &&
@@ -120,12 +103,6 @@ func evaluateScenario(dataset Dataset, scenario Scenario, observation Observatio
 
 	if !abstentionCorrect {
 		result.Failures = append(result.Failures, Failure{Kind: "abstention_incorrect"})
-	}
-
-	if len(claims) > 0 {
-		groundedness := float64(supported) / float64(len(claims))
-		citationCorrectness := float64(cited) / float64(len(claims))
-		result.Groundedness, result.CitationCorrectness = &groundedness, &citationCorrectness
 	}
 
 	if len(result.Failures) > 0 {
