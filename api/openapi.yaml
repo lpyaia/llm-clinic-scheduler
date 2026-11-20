@@ -23,6 +23,13 @@ paths:
         O modelo chama list_appointments, find_available_slots ou create_appointment; nomes são
         resolvidos pelo catálogo e datas relativas usam o relógio e fuso da clínica.
         A resposta em português é montada pelo servidor a partir dos resultados reais.
+        Perguntas operacionais usam search_clinic_knowledge. O servidor apresenta trechos recuperados
+        com nome da fonte, documento, trecho e linhas em message; IDs de fontes não recuperadas são rejeitados.
+        Sem suporte, informa que não encontrou a informação nos materiais da clínica.
+        Falhas de recuperação produzem uma mensagem de indisponibilidade, sem resposta factual.
+        Ambos são HTTP 200 com appointments vazio, sem proposta nem disponibilidade.
+        Médicos, especialidades, vagas e agendamentos continuam usando o núcleo determinístico;
+        aconselhamento médico permanece fora do escopo.
         Remarcação identifica o original com select_appointment e prepara um destino apresentado
         com reschedule_appointment. Cancelamento usa cancel_appointment com os filtros do original;
         vários candidatos próprios exigem esclarecimento, sem preparar uma ação.

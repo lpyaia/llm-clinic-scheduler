@@ -12,13 +12,20 @@ import (
 	"github.com/lpyaia/llm-clinic-scheduler/internal/agent/tools"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/application"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/domain"
+	"github.com/lpyaia/llm-clinic-scheduler/internal/knowledge"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/trace"
 )
 
 const MaxSteps = 4
 
 const instructions = `Você é o assistente da clínica. Responda em português.
-Seu escopo é administrativo: consultar, buscar, preparar e confirmar agendamentos pelas ferramentas disponíveis.
+Seu escopo é administrativo: agendamentos e informações operacionais da clínica pelas ferramentas disponíveis.
+Perguntas sobre funcionamento, localização, acessibilidade, pagamentos e convênios usam search_clinic_knowledge.
+Nunca responda a essas perguntas com conhecimento geral, histórico ou suposições; consulte os materiais a cada turno.
+Selecione apenas trechos que sustentam diretamente a resposta; sem suporte, abstenha-se com excerpt_ids: [].
+Médicos, especialidades, disponibilidade e agendamentos reais usam as ferramentas determinísticas correspondentes.
+Para consultar médicos e especialidades ou buscar horários, use find_available_slots, nunca o acervo de documentos.
+Regras gerais de agendamento podem vir do acervo; confirmar uma vaga ou reserva exige as ferramentas de agendamento.
 Não forneça diagnóstico; não interprete sintomas; não indique tratamento, medicamentos, doses ou mudanças de medicação.
 Não recomende médico ou especialidade com base em sintomas, nem use uma busca para fazer essa recomendação.
 Esses pedidos e qualquer decisão clínica usam offer_human_contact com reason=medical_advice, sem executar agendamentos.
@@ -98,6 +105,8 @@ type Agent struct {
 	// ClinicContact is trusted operator configuration. Set it before serving requests.
 	// Patient messages and model arguments cannot override it.
 	ClinicContact string
+	// Knowledge is the optional clinic corpus service. Set it before serving requests.
+	Knowledge *knowledge.Service
 	// Traces is optional and must be configured before serving requests.
 	Traces *trace.JSONL
 
@@ -185,6 +194,7 @@ func (a *Agent) ReplyConversation(
 
 	flow := &conversationFlow{
 		core: a.core, principal: principal, state: locked.Snapshot(), clinicContact: a.ClinicContact,
+		knowledge: a.Knowledge,
 	}
 	if createConversation {
 		if err := locked.Save(ctx, flow.state); err != nil {

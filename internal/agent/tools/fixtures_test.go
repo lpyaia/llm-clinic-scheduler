@@ -15,7 +15,7 @@ import (
 func executor(t *testing.T, core *application.Service, name string) tools.Executor {
 	t.Helper()
 
-	for _, executor := range tools.New(core, tools.Schemas{}) {
+	for _, executor := range tools.New(core, nil, tools.Schemas{}) {
 		if executor.Definition().Name == name {
 			return executor
 		}

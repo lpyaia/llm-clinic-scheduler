@@ -8,6 +8,7 @@ import (
 	"github.com/lpyaia/llm-clinic-scheduler/internal/agent/contract"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/application"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/domain"
+	"github.com/lpyaia/llm-clinic-scheduler/internal/knowledge"
 )
 
 // Executor separates tool definitions and execution from model-loop policy.
@@ -42,10 +43,12 @@ type Schemas struct {
 	RescheduleAppointment json.RawMessage
 	CancelAppointment     json.RawMessage
 	OfferHumanContact     json.RawMessage
+	SearchClinicKnowledge json.RawMessage
+	KnowledgeAnswer       json.RawMessage
 }
 
 // New supplies the supported tools; the flow limits their availability per turn.
-func New(core *application.Service, schemas Schemas) []Executor {
+func New(core *application.Service, corpus *knowledge.Service, schemas Schemas) []Executor {
 	return []Executor{
 		&appointmentQuery{core: core, schema: schemas},
 		&slotSearch{core: core, schema: schemas},
@@ -55,6 +58,7 @@ func New(core *application.Service, schemas Schemas) []Executor {
 		&reschedulingPreparation{core: core, schema: schemas.RescheduleAppointment},
 		&proposalResponse{schema: schemas.RespondToProposal},
 		&humanContact{schema: schemas.OfferHumanContact},
+		&knowledgeSearch{corpus: corpus, schemas: schemas},
 	}
 }
 
