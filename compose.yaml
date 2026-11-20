@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:17
+    image: pgvector/pgvector:0.8.7-pg17
     environment:
       POSTGRES_USER: clinic
       POSTGRES_PASSWORD: clinic
@@ -15,7 +15,7 @@ services:
       timeout: 3s
       retries: 20
   test-db:
-    image: postgres:17
+    image: pgvector/pgvector:0.8.7-pg17
     profiles: [test]
     environment:
       POSTGRES_USER: clinic

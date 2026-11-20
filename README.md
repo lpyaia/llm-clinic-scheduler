@@ -13,6 +13,7 @@ linguagem e chamará os mesmos casos de uso.
   contratos e critérios de aceite.
 - [Contrato OpenAPI](api/openapi.yaml): especificação da API REST da fase 1.
 - [Avaliações do agente](docs/evals/README.md): cenários em português, reprodução determinística e modo real explícito.
+- [Documentos da clínica](docs/knowledge/README.md): FAQ simulado, ingestão e busca local com pgvector e citações.
 - [Swagger UI local](http://127.0.0.1:3000/docs): documentação interativa com execução de requisições.
 
 ## Executar localmente
