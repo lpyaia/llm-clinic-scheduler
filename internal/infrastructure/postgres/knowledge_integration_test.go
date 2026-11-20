@@ -4,9 +4,11 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"math"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -46,6 +48,330 @@ func (fn embeddingFunc) Embed(
 type unreadableDocument struct{}
 
 func (unreadableDocument) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }
+
+func TestKnowledgeReingestionReplacesCurrentChunks(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: "faq-v1", Dimensions: 3}
+	service, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	old, err := service.Ingest(ctx, "politica.md", strings.NewReader("estacionamento antigo\n\nônibus removido"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	current, err := service.Ingest(ctx, "politica.md", strings.NewReader("Atendimento atualizado."))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := service.Search(ctx, "estacionamento", 10)
+	if err != nil || len(rows) != 1 || rows[0].Text != "Atendimento atualizado." ||
+		rows[0].DocumentID != current.ID || current.ID == old.ID {
+		t.Fatalf("reingestion must replace the old document and all its chunks: %+v, %v", rows, err)
+	}
+}
+
+func TestKnowledgeFiltersBeforeRanking(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: "faq-v1", Dimensions: 3}
+	service, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, doc := range []struct {
+		source, text string
+		metadata     knowledge.Metadata
+	}{
+		{"abdome.md", "Orientação administrativa para ultrassom abdominal.",
+			knowledge.Metadata{Topic: "preparation", Exam: "Ultrassom abdominal"}},
+		{"tireoide.md", "estacionamento: orientação de ultrassom da tireoide.",
+			knowledge.Metadata{Topic: "preparation", Exam: "Ultrassom da tireoide"}},
+		{"politica.md", "estacionamento: política de ultrassom abdominal.",
+			knowledge.Metadata{Topic: "policy", Exam: "Ultrassom abdominal"}},
+	} {
+		if _, err := service.Ingest(ctx, doc.source, strings.NewReader(doc.text), doc.metadata); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	rows, err := service.Search(ctx, "estacionamento", 1,
+		knowledge.Filter{Topic: "preparation", Exam: "ULTRASSOM ABDOMINAL"})
+	if err != nil || len(rows) != 1 || rows[0].Source != "abdome.md" ||
+		rows[0].Metadata.Exam != "Ultrassom abdominal" {
+		t.Fatalf("scope must apply before ranking and limit: %+v, %v", rows, err)
+	}
+
+	_, err = service.Search(ctx, "preparação do ultrassom", 3,
+		knowledge.Filter{Topic: "preparation", Exam: "ultrassom"})
+	if !errors.Is(err, knowledge.ErrAmbiguous) {
+		t.Fatalf("ambiguous entity must not retrieve either preparation: %v", err)
+	}
+}
+
+func TestKnowledgePDFPreservesPageLocations(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: "faq-v1", Dimensions: 3}
+	service, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const source = "../../../docs/knowledge/preparo-ultrassom-abdominal-simulated.pdf"
+	file, err := os.Open(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = file.Close() }()
+
+	_, err = service.Ingest(ctx, source, file,
+		knowledge.Metadata{Topic: "preparation", Exam: "Ultrassom abdominal"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := service.Search(ctx, "formulário azul", 100,
+		knowledge.Filter{Topic: "preparation", Exam: "Ultrassom abdominal"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	found := false
+	for _, row := range rows {
+		if strings.Contains(row.Text, "sala de apoio 2") {
+			found = true
+			if row.Source != source || row.Page != 2 || row.StartLine < 1 || row.EndLine < row.StartLine {
+				t.Fatalf("lost PDF page or extracted line location: %+v", row)
+			}
+		}
+	}
+
+	if !found {
+		t.Fatalf("second PDF page missing from retrieval: %+v", rows)
+	}
+}
+
+func TestKnowledgeFiltersProcedureAndDoctorAndAsksForMissingContext(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: "faq-v1", Dimensions: 3}
+	service, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, doc := range []struct {
+		source string
+		meta   knowledge.Metadata
+	}{
+		{"ana-souza.md", knowledge.Metadata{Topic: "doctor_profile", Doctor: "Dra. Ana Souza"}},
+		{"ana-lima.md", knowledge.Metadata{Topic: "doctor_profile", Doctor: "Dra. Ana Lima"}},
+		{"curativo.md", knowledge.Metadata{Topic: "policy", Procedure: "Curativo simples"}},
+		{"biopsia.md", knowledge.Metadata{Topic: "policy", Procedure: "Biópsia de pele"}},
+	} {
+		if _, err := service.Ingest(ctx, doc.source, strings.NewReader(doc.source), doc.meta); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, test := range []struct {
+		filter knowledge.Filter
+		source string
+	}{
+		{knowledge.Filter{Topic: "doctor_profile", Doctor: "ana souza"}, "ana-souza.md"},
+		{knowledge.Filter{Topic: "policy", Procedure: "BIOPSIA DE PELE"}, "biopsia.md"},
+	} {
+		rows, err := service.Search(ctx, "informações", 10, test.filter)
+		if err != nil || len(rows) != 1 || rows[0].Source != test.source {
+			t.Fatalf("wrong entity scope for %+v: %+v, %v", test.filter, rows, err)
+		}
+	}
+
+	for _, filter := range []knowledge.Filter{
+		{Topic: "doctor_profile", Doctor: "Ana"}, {Topic: "doctor_profile"}, {Topic: "policy"},
+	} {
+		if _, err := service.Search(ctx, "informações", 10, filter); !errors.Is(err, knowledge.ErrAmbiguous) {
+			t.Fatalf("missing or ambiguous context must ask instead of mixing entities: %+v, %v", filter, err)
+		}
+	}
+
+	rows, err := service.Search(ctx, "informações", 10, knowledge.Filter{Topic: "policy", Procedure: "inexistente"})
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("unknown entities must not fall back to another context: %+v, %v", rows, err)
+	}
+}
+
+func TestKnowledgeGeneralPolicyDoesNotRetrieveEntityPolicies(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: "faq-v1", Dimensions: 3}
+	service, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := service.Ingest(ctx, "geral.md", strings.NewReader("Política geral."),
+		knowledge.Metadata{Topic: "policy"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := service.Ingest(ctx, "exame.md", strings.NewReader("estacionamento: política específica."),
+		knowledge.Metadata{Topic: "policy", Exam: "Ultrassom abdominal"}); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := service.Search(ctx, "estacionamento", 10, knowledge.Filter{Topic: "policy"})
+	if err != nil || len(rows) != 1 || rows[0].Source != "geral.md" {
+		t.Fatalf("general policies must exclude exam-specific contexts: %+v, %v", rows, err)
+	}
+}
+
+func TestKnowledgePreparationAsksForDoctorWhenInstructionsDependOnDoctor(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: "faq-v1", Dimensions: 3}
+	service, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, doctor := range []string{"Ana Souza", "Ana Lima"} {
+		if _, err := service.Ingest(ctx, doctor+".md", strings.NewReader("Orientação de "+doctor),
+			knowledge.Metadata{Topic: "preparation", Exam: "Ultrassom abdominal", Doctor: doctor}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	_, err = service.Search(ctx, "Como preparar?", 3,
+		knowledge.Filter{Topic: "preparation", Exam: "Ultrassom abdominal"})
+	if !errors.Is(err, knowledge.ErrAmbiguous) {
+		t.Fatalf("an exact exam must not mix preparations belonging to different doctors: %v", err)
+	}
+}
+
+func TestKnowledgeFailedReplacementPreservesPreviousVersion(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: "faq-v1", Dimensions: 3}
+	service, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	old, err := service.Ingest(ctx, "current.md", strings.NewReader("estacionamento anterior"),
+		knowledge.Metadata{Topic: "policy", Exam: "Exame anterior"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f.must(f.store.db.Exec(`
+		CREATE FUNCTION reject_replacement() RETURNS trigger LANGUAGE plpgsql AS $$
+		BEGIN
+		    IF NEW.ordinal = 2 THEN RAISE EXCEPTION 'simulated failure'; END IF;
+		    RETURN NEW;
+		END;
+		$$
+	`).Error)
+	f.must(f.store.db.Exec(`
+		CREATE TRIGGER reject_replacement BEFORE INSERT ON clinic_document_chunks
+		FOR EACH ROW EXECUTE FUNCTION reject_replacement()
+	`).Error)
+
+	_, err = service.Ingest(ctx, "current.md", strings.NewReader("novo\n\nsegundo trecho"),
+		knowledge.Metadata{Topic: "preparation", Exam: "Exame novo"})
+	if err == nil {
+		t.Fatal("expected a failed replacement")
+	}
+
+	rows, err := service.Search(ctx, "estacionamento", 10,
+		knowledge.Filter{Topic: "policy", Exam: "Exame anterior"})
+	if err != nil || len(rows) != 1 || rows[0].DocumentID != old.ID || rows[0].Text != "estacionamento anterior" {
+		t.Fatalf("failed replacement lost previous metadata, text or vector: %+v, %v", rows, err)
+	}
+
+	f.must(f.store.db.Exec("DROP TRIGGER reject_replacement ON clinic_document_chunks").Error)
+	for range 2 {
+		if _, err := service.Ingest(ctx, "current.md", strings.NewReader("atual"),
+			knowledge.Metadata{Topic: "preparation", Exam: "Exame novo"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	rows, err = service.Search(ctx, "estacionamento", 10)
+	if err != nil || len(rows) != 1 || rows[0].Text != "atual" || rows[0].Metadata.Exam != "Exame novo" {
+		t.Fatalf("repeated replacement kept stale data or duplicate vectors: %+v, %v", rows, err)
+	}
+
+	rows, err = service.Search(ctx, "estacionamento", 10,
+		knowledge.Filter{Topic: "policy", Exam: "Exame anterior"})
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("removed scope remains searchable: %+v, %v", rows, err)
+	}
+}
+
+func TestKnowledgeSimulatedCorpusCanBeIngestedWithItsMetadata(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: "faq-v1", Dimensions: 3}
+	service, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile("../../../docs/knowledge/corpus.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var entries []struct {
+		File string `json:"file"`
+		knowledge.Metadata
+	}
+	if err := json.Unmarshal(data, &entries); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, entry := range entries {
+		file, err := os.Open("../../../" + entry.File)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		_, err = service.Ingest(ctx, entry.File, file, entry.Metadata)
+		_ = file.Close()
+		if err != nil {
+			t.Fatalf("ingest %s: %v", entry.File, err)
+		}
+	}
+
+	for _, topic := range []string{"general", "faq", "policy", "preparation", "insurance", "doctor_profile"} {
+		filter := knowledge.Filter{Topic: topic}
+		if topic == "preparation" {
+			filter.Exam = "Ultrassom abdominal"
+		}
+
+		if topic == "doctor_profile" {
+			filter.Doctor = "Dra. Ana Souza"
+		}
+
+		rows, err := service.Search(ctx, "materiais", 100, filter)
+		if err != nil || len(rows) == 0 {
+			t.Fatalf("corpus has no retrievable %s material: %+v, %v", topic, rows, err)
+		}
+
+		for _, row := range rows {
+			if row.Metadata.Topic != topic {
+				t.Fatalf("topic leakage: %+v", row)
+			}
+		}
+	}
+}
 
 func TestKnowledgeSearchRanksAcrossDocuments(t *testing.T) {
 	f := setup(t)

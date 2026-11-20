@@ -328,9 +328,10 @@ se estiver vazio, o assistente informa que o canal não está configurado, sem i
 Especialidades escolhidas explicitamente pelo paciente continuam disponíveis para busca administrativa.
 Veja os [cenários de avaliação em português](docs/evals/README.md).
 
-Perguntas operacionais usam `search_clinic_knowledge` e retornam trechos dos materiais importados com documento e
-linhas. Sem suporte, o agente se abstém; falhas de recuperação são informadas sem resposta factual. Configure os
-embeddings e importe os FAQs conforme o [roteiro de conhecimento da clínica](docs/knowledge/README.md).
+Perguntas operacionais usam `search_clinic_knowledge`, com filtros por assunto, exame, procedimento e médico.
+As fontes incluem documento, linhas e página de PDF; entidades ambíguas pedem esclarecimento. Reingestão substitui
+a fonte atual sem manter trechos antigos. Sem suporte, o agente se abstém; falhas de recuperação são informadas
+sem resposta factual. Configure embeddings e importe o [acervo simulado](docs/knowledge/README.md).
 
 1. Agente em português, abstração de LLM, tool calling, loop limitado e estado em memória. Tools reutilizam os casos de
    uso; confirmações ficam ligadas ao ID da ação pendente.

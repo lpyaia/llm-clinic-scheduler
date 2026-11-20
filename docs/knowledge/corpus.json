@@ -1,0 +1,60 @@
+[
+  {
+    "file": "docs/knowledge/faq-simulated.md",
+    "topic": "general"
+  },
+  {
+    "file": "docs/knowledge/faq-atendimento-simulated.md",
+    "topic": "faq"
+  },
+  {
+    "file": "docs/knowledge/faq-agendamentos-simulated.md",
+    "topic": "faq"
+  },
+  {
+    "file": "docs/knowledge/faq-pagamentos-simulated.md",
+    "topic": "faq"
+  },
+  {
+    "file": "docs/knowledge/faq-acessibilidade-simulated.md",
+    "topic": "faq"
+  },
+  {
+    "file": "docs/knowledge/faq-convenios-simulated.md",
+    "topic": "insurance"
+  },
+  {
+    "file": "docs/knowledge/politica-geral-simulated.md",
+    "topic": "policy"
+  },
+  {
+    "file": "docs/knowledge/politica-curativo-simulated.md",
+    "topic": "policy",
+    "procedure": "Curativo simples"
+  },
+  {
+    "file": "docs/knowledge/politica-biopsia-simulated.md",
+    "topic": "policy",
+    "procedure": "Biópsia de pele"
+  },
+  {
+    "file": "docs/knowledge/preparo-ultrassom-abdominal-simulated.pdf",
+    "topic": "preparation",
+    "exam": "Ultrassom abdominal"
+  },
+  {
+    "file": "docs/knowledge/preparo-ultrassom-tireoide-simulated.pdf",
+    "topic": "preparation",
+    "exam": "Ultrassom da tireoide"
+  },
+  {
+    "file": "docs/knowledge/perfil-ana-souza-simulated.md",
+    "topic": "doctor_profile",
+    "doctor": "Dra. Ana Souza"
+  },
+  {
+    "file": "docs/knowledge/perfil-ana-lima-simulated.md",
+    "topic": "doctor_profile",
+    "doctor": "Dra. Ana Lima"
+  }
+]

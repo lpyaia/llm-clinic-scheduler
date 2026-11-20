@@ -20,11 +20,16 @@ const MaxSteps = 4
 
 const instructions = `Você é o assistente da clínica. Responda em português.
 Seu escopo é administrativo: agendamentos e informações operacionais da clínica pelas ferramentas disponíveis.
-Perguntas sobre funcionamento, localização, acessibilidade, pagamentos e convênios usam search_clinic_knowledge.
+Perguntas sobre funcionamento, políticas, preparo, convênios e perfis documentais usam search_clinic_knowledge.
+Restrinja topic ao assunto: general, faq, policy, preparation, insurance ou doctor_profile.
+Informe exam, procedure e doctor com os nomes mencionados no pedido ou claramente definidos no contexto; demais null.
+Não escolha uma entidade ambígua. Uma pergunta sobre preparo ou política específica exige identificar seu contexto.
+Se o paciente disser só ultrassom ou só o primeiro nome, preserve esse nome parcial para pedir esclarecimento.
+Perfil documental informa apresentação administrativa; não substitui o catálogo nem recomenda atendimento.
 Nunca responda a essas perguntas com conhecimento geral, histórico ou suposições; consulte os materiais a cada turno.
 Selecione apenas trechos que sustentam diretamente a resposta; sem suporte, abstenha-se com excerpt_ids: [].
 Médicos, especialidades, disponibilidade e agendamentos reais usam as ferramentas determinísticas correspondentes.
-Para consultar médicos e especialidades ou buscar horários, use find_available_slots, nunca o acervo de documentos.
+Para listar médicos ativos ou especialidades do catálogo ou buscar horários, use find_available_slots.
 Regras gerais de agendamento podem vir do acervo; confirmar uma vaga ou reserva exige as ferramentas de agendamento.
 Não forneça diagnóstico; não interprete sintomas; não indique tratamento, medicamentos, doses ou mudanças de medicação.
 Não recomende médico ou especialidade com base em sintomas, nem use uma busca para fazer essa recomendação.
@@ -268,7 +273,10 @@ func (a *Agent) replyWithModel(
 
 	system := in.Messages[0].Content
 
-	var finalize tools.AnswerFinalizer
+	var (
+		finalize   tools.AnswerFinalizer
+		answerOnly bool
+	)
 
 	seenCalls := make(map[string]bool)
 
@@ -307,7 +315,7 @@ func (a *Agent) replyWithModel(
 			return out, err
 		}
 
-		if len(response.ToolCalls) != 1 || len(bytes.TrimSpace(response.Content)) != 0 {
+		if answerOnly || len(response.ToolCalls) != 1 || len(bytes.TrimSpace(response.Content)) != 0 {
 			validation := run.StartStep(trace.Step{Kind: "validation", ParentID: modelStep.ID()}, response)
 			validation.End(nil, contract.InvalidResponse())
 
@@ -349,7 +357,13 @@ func (a *Agent) replyWithModel(
 		case tools.ReturnToModel:
 			toolStep.End(out.Content, nil)
 			finalize = out.Finalize
-			in.Tools = flow.availableTools()
+
+			answerOnly = out.AnswerOnly
+			in.Tools = nil
+			if !answerOnly {
+				in.Tools = flow.availableTools()
+			}
+
 			in.RequireTool = false
 			in.ResponseSchema = &out.ResponseSchema
 			in.Messages[0].Content = system + "\n" + out.Instructions

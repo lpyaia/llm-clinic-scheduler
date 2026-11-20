@@ -15,7 +15,9 @@ import (
 )
 
 var (
-	ErrExtraction    = errors.New("document extraction failed; use UTF-8 .txt or .md up to 64 KiB")
+	ErrExtraction = errors.New(
+		"document extraction failed; use UTF-8 .txt/.md or a text PDF within documented limits",
+	)
 	ErrEmpty         = errors.New("document contains no text")
 	ErrEmbeddings    = errors.New("embedding generation failed")
 	ErrConfiguration = errors.New("invalid embedding configuration")
@@ -73,6 +75,7 @@ type Document struct {
 	Content         string          `json:"-"`
 	EmbeddingConfig EmbeddingConfig `json:"embedding_config"`
 	ChunkCount      int             `json:"chunk_count"`
+	Metadata        Metadata        `json:"metadata"`
 }
 
 type Chunk struct {
@@ -80,6 +83,7 @@ type Chunk struct {
 	Text               string
 	StartLine, EndLine int
 	Vector             []float32
+	Page               int
 }
 
 type Result struct {
@@ -90,6 +94,8 @@ type Result struct {
 	StartLine  int       `json:"start_line"`
 	EndLine    int       `json:"end_line"`
 	Similarity float64   `json:"similarity"`
+	Metadata   Metadata  `json:"metadata"       gorm:"embedded"`
+	Page       int       `json:"page,omitempty"`
 }
 
 // Embedder is the external embedding-provider boundary. Outputs correspond to inputs in order.
@@ -97,14 +103,18 @@ type Embedder interface {
 	Embed(context.Context, EmbeddingConfig, []string) ([][]float32, error)
 }
 
-// Repository saves complete immutable documents atomically. CorpusConfig returns nil for an empty corpus
+// Repository replaces the current document and all chunks with the same source atomically, without history.
+// Replacement must serialize with other imports; failures preserve the previous version.
+// CorpusConfig returns nil for an empty corpus
 // and ErrIncompatible for mixed configurations. SearchCorpus must reject incompatible configurations
 // before comparing vectors. SaveDocument serializes the configuration check with insertion, so
 // concurrent imports cannot establish different configurations. Failed writes leave no partial state.
 type Repository interface {
 	SaveDocument(context.Context, Document, []Chunk) error
 	CorpusConfig(context.Context) (*EmbeddingConfig, error)
-	SearchCorpus(context.Context, EmbeddingConfig, []float32, int) ([]Result, error)
+	// Scopes returns distinct current metadata for resolving names without loading document content.
+	Scopes(context.Context) ([]Metadata, error)
+	SearchCorpus(context.Context, EmbeddingConfig, []float32, int, ResolvedFilter) ([]Result, error)
 }
 
 type Service struct {
@@ -125,13 +135,30 @@ func New(repo Repository, embedder Embedder, config EmbeddingConfig) (*Service, 
 	return &Service{repo: repo, embedder: embedder, config: config}, nil
 }
 
-func (s *Service) Ingest(ctx context.Context, source string, input io.Reader) (Document, error) {
-	content, err := extract(source, input)
+// Ingest accepts optional metadata for compatibility with existing unclassified documents.
+func (s *Service) Ingest(ctx context.Context, source string, input io.Reader, metadata ...Metadata) (Document, error) {
+	if len(metadata) > 1 {
+		return Document{}, ErrInput
+	}
+
+	meta := Metadata{Topic: "general"}
+	if len(metadata) == 1 {
+		meta = metadata[0]
+	}
+
+	if err := meta.Validate(); err != nil {
+		return Document{}, err
+	}
+
+	if meta.Topic == "" {
+		meta.Topic = "general"
+	}
+
+	content, chunks, err := extractDocument(ctx, source, input)
 	if err != nil {
 		return Document{}, err
 	}
 
-	chunks := split(content)
 	if len(chunks) > 256 {
 		return Document{}, fmt.Errorf("%w: maximum 256 chunks", ErrExtraction)
 	}
@@ -157,6 +184,7 @@ func (s *Service) Ingest(ctx context.Context, source string, input io.Reader) (D
 	doc := Document{
 		ID: uuid.New(), Source: source, Content: content,
 		EmbeddingConfig: s.config, ChunkCount: len(chunks),
+		Metadata: meta,
 	}
 	if err := s.repo.SaveDocument(ctx, doc, chunks); err != nil {
 		return Document{}, fmt.Errorf("save document: %w", err)
@@ -165,7 +193,21 @@ func (s *Service) Ingest(ctx context.Context, source string, input io.Reader) (D
 	return doc, nil
 }
 
-func (s *Service) Search(ctx context.Context, question string, limit int) ([]Result, error) {
+// Search accepts one optional filter; omitted filters retain the corpus-wide CLI behavior.
+func (s *Service) Search(ctx context.Context, question string, limit int, filters ...Filter) ([]Result, error) {
+	if len(filters) > 1 {
+		return nil, ErrInput
+	}
+
+	var filter Filter
+	if len(filters) == 1 {
+		filter = filters[0]
+	}
+
+	if err := Metadata(filter).Validate(); err != nil {
+		return nil, err
+	}
+
 	question = strings.TrimSpace(question)
 	if question == "" || !utf8.ValidString(question) || utf8.RuneCountInString(question) > 1000 ||
 		limit < 1 || limit > 100 {
@@ -181,12 +223,23 @@ func (s *Service) Search(ctx context.Context, question string, limit int) ([]Res
 		return []Result{}, nil
 	}
 
+	filter, matched, err := s.resolveFilter(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	if !matched {
+		return []Result{}, nil
+	}
+
 	vectors, err := s.embed(ctx, []string{question})
 	if err != nil {
 		return nil, err
 	}
 
-	return s.repo.SearchCorpus(ctx, s.config, vectors[0], limit)
+	resolved := ResolvedFilter{Filter: filter, GeneralOnly: filter.generalPolicy()}
+
+	return s.repo.SearchCorpus(ctx, s.config, vectors[0], limit, resolved)
 }
 
 // validateCorpus returns whether documents exist and rejects any incompatible corpus configuration.

@@ -1,8 +1,8 @@
 # Ingestão e recuperação de documentos da clínica
 
-O operador importa um FAQ e pesquisa
-trechos de todo o acervo classificados por similaridade de cosseno, com documento, texto e linhas para conferir
-as fontes. A busca recebe somente a pergunta e o limite; o operador não precisa escolher um documento.
+O operador importa materiais operacionais e pesquisa trechos classificados por similaridade de cosseno.
+Metadados permitem filtrar assunto, exame, procedimento e médico antes do ranking. As fontes preservam documento,
+texto, linhas e, para PDFs, página. Sem filtros, o comando pesquisa todo o acervo.
 
 A integração conversacional de #21 usa esse mesmo acervo por `search_clinic_knowledge`, com respostas citadas
 e abstention. O comando `knowledge search` continua disponível para inspecionar a recuperação isoladamente.
@@ -54,9 +54,66 @@ Na primeira pergunta, confira o trecho “Há estacionamento?”; na segunda, �
 Os valores de similaridade dependem do modelo; não são probabilidades nem uma garantia de relevância.
 O comando apresenta trechos recuperados, sem compor uma resposta clínica ou aplicar limiar de abstention.
 
-O `id` retornado identifica a fonte nas citações; ele não é um argumento da busca. Os documentos continuam
-pesquisáveis após reiniciar o processo. Cada importação cria um documento novo e imutável; reimportar não substitui
-documentos anteriores e pode produzir resultados duplicados. Substituição de documentos pertence à issue #22.
+O `id` retornado identifica a versão atual nas citações; ele não é um argumento da busca. Os documentos continuam
+pesquisáveis após reiniciar o processo. Reimportar o mesmo `source` substitui documento, metadados, chunks e vetores
+em uma transação, com outro UUID e sem histórico. Trechos removidos deixam de aparecer em novas recuperações.
+A identidade da fonte é o caminho passado em `-file`, comparado exatamente; use sempre a mesma grafia e caminho
+relativo à raiz. Arquivos com nomes diferentes são fontes diferentes. A substituição também elimina duplicatas
+legadas daquela fonte; fontes antigas não reimportadas permanecem intactas.
+
+## Acervo operacional e filtros (#22)
+
+[corpus.json](corpus.json) lista os materiais simulados e seus metadados, incluindo dois PDFs de preparação,
+políticas gerais e por procedimento, convênios e perfis documentais de duas médicas chamadas Ana.
+Cada fonte possui um assunto e um contexto de entidades; divida um material que misture contextos em fontes distintas.
+Todos os nomes, formulários e condições são fictícios. Os PDFs não definem jejum ou medicamentos.
+
+Importe o acervo na raiz do projeto, usando a configuração de embeddings acima:
+
+```powershell
+foreach ($doc in (Get-Content docs/knowledge/corpus.json -Raw | ConvertFrom-Json)) {
+    $arguments = @('ingest', '-file', $doc.file, '-topic', $doc.topic)
+    foreach ($field in @('exam', 'procedure', 'doctor')) {
+        if ($doc.$field) { $arguments += @("-$field", $doc.$field) }
+    }
+    go run ./cmd/knowledge @arguments
+    if ($LASTEXITCODE -ne 0) { throw "Falha na ingestão: $($doc.file)" }
+}
+
+go run ./cmd/knowledge search -question 'Qual formulário apresentar?' -topic preparation -exam 'Ultrassom abdominal'
+go run ./cmd/knowledge search -question 'Qual protocolo apresentar?' -topic policy -procedure 'Biópsia de pele'
+go run ./cmd/knowledge search -question 'Qual apresentação administrativa?' -topic doctor_profile -doctor 'Ana Souza'
+```
+
+`-topic` aceita `general`, `faq`, `policy`, `preparation`, `insurance` ou `doctor_profile`.
+`-exam`, `-procedure` e `-doctor` aceitam nomes do acervo. Nomes são comparados sem distinção de maiúsculas ou acentos;
+um nome exato tem prioridade, seguido por uma sequência parcial de palavras. Filtros são combinados por AND.
+Uma entidade desconhecida retorna `[]`, sem pesquisar outro contexto. Ausência ou ambiguidade de entidade em preparo
+ou perfil pede esclarecimento antes de recuperar trechos. Para políticas sem entidade, somente políticas gerais são
+recuperadas; se só existirem políticas específicas, o paciente deve identificar o contexto.
+O CLI retorna erro de contexto ambíguo; a conversa apresenta opções dos metadados,
+sem mostrar o preparo de outra entidade.
+
+Exemplos conversacionais na mesma sessão:
+
+| Mensagem | Resultado esperado |
+| --- | --- |
+| Como preparo o ultrassom? | Qual ultrassom: abdominal ou da tireoide? |
+| O abdominal | Trechos apenas do ultrassom abdominal, com página e linhas |
+| Qual protocolo para biópsia de pele? | Política do procedimento, sem trazer a política de curativo |
+| Quero conhecer o perfil da Dra. Ana | Qual Ana: Souza ou Lima? |
+| Quais horários a Dra. Ana Souza tem? | Busca no catálogo e núcleo determinístico |
+
+O modelo extrai o assunto e os nomes do pedido e do contexto; o serviço resolve esses nomes nos metadados persistidos.
+Filtros não são inferidos por similaridade vetorial. A qualidade da interpretação do pedido depende do modelo;
+testes simulados verificam o contrato e os efeitos determinísticos, sem demonstrar acerto semântico universal.
+
+Para atualizar uma fonte, edite seu arquivo e execute novamente sua ingestão, mantendo o caminho e informando os
+metadados atuais. Metadados omitidos voltam a `general`, sem entidades. Falha de extração, embeddings, cancelamento
+ou gravação preserva a versão anterior completa. Chamadas externas ocorrem antes do lock de importação.
+
+Os PDFs podem ser regenerados com `python scripts/generate-knowledge-pdfs.py` em um ambiente com `reportlab`.
+O parser de produção usa [ledongthuc/pdf](https://github.com/ledongthuc/pdf), sem executáveis externos ou OCR.
 
 ## FAQ fictício de convênios
 
@@ -118,12 +175,17 @@ diferentes. Os exemplos sobre preços e recursos não confirmados permitem confe
 
 ## Extração, chunking e falhas
 
-- Formatos aceitos: `.md` e `.txt`, UTF-8, até 64 KiB. PDF, binários, UTF-8 inválido, falha de leitura ou excesso de
-  tamanho retornam `document extraction failed`; nenhum embedding é solicitado para esses casos.
+- Formatos aceitos: `.md` e `.txt`, UTF-8, até 64 KiB; PDF textual até 1 MiB, 32 páginas e 64 KiB de texto extraído.
+  PDF inválido, criptografado, binários, UTF-8 inválido, falha de leitura ou excesso de tamanho
+  retornam erro de extração.
+  nenhum embedding é solicitado para esses casos. PDF sem texto retorna `document contains no text`; não há OCR.
 - Um documento sem texto retorna `document contains no text`. A extração remove BOM UTF-8 inicial e normaliza
   CRLF/CR para LF, preservando os números de linha da fonte. Markdown é mantido como texto, incluindo seus títulos.
 - Parágrafos separados por linhas em branco formam chunks de até 1000 caracteres Unicode, sem overlap de conteúdo.
   Linhas longas são divididas; nesse caso, chunks diferentes podem citar a mesma linha. O limite é de 256 chunks.
+- Chunks de PDF nunca atravessam páginas. `page` identifica a página original a partir de 1, inclusive após páginas
+  vazias. Linhas de PDF se referem ao texto extraído daquela página,
+  não a coordenadas visuais ou linhas do arquivo binário.
 - Embeddings são gerados antes da transação. Falha do fornecedor, quantidade incorreta de vetores, dimensão errada,
   NaN, infinito e vetores zero interrompem a ingestão. Documento e chunks são gravados em uma única transação;
   falha de banco desfaz toda a gravação. Contexto cancelado e `COMMAND_TIMEOUT` interrompem a operação.
@@ -164,7 +226,11 @@ configurações diferentes, uma conclui e a outra retorna incompatibilidade; amb
 Na busca, o módulo confere a configuração do acervo antes de gerar o vetor da pergunta. A consulta SQL repete a guarda
 de compatibilidade no mesmo snapshot da comparação e ordena os chunks de todos os documentos. O caminho normal
 faz duas consultas ao banco e uma chamada ao fornecedor. Uma consulta sem resultados reconfere a configuração para
-distinguir incompatibilidade de acervo vazio. Documentos são imutáveis; falhas na gravação fazem rollback.
+distinguir incompatibilidade de ausência de correspondência. Busca filtrada carrega também o catálogo de metadados
+para resolver entidades antes dos embeddings. Falhas na substituição fazem rollback da remoção e da nova gravação.
+Importações da mesma fonte são serializadas; a última transação concluída define a versão atual. Buscas concorrentes
+observam uma versão completa no snapshot da consulta SQL. O histórico de conversa já exibido continua sendo histórico;
+citações do histórico nunca são aceitas como evidência de uma nova recuperação.
 
 ## Respostas conversacionais com fontes (#21)
 
@@ -182,7 +248,7 @@ Na sessão autenticada descrita em [agent-local.md](../agent-local.md), envie es
 Perguntas operacionais consultam até três trechos de todo o acervo. O modelo seleciona os `excerpt_ids` que sustentam
 diretamente a pergunta; similaridade não garante suporte. Uma lista vazia indica abstention. O servidor valida cada ID
 contra a última recuperação do turno e apresenta o texto integral do trecho, sem acrescentar fatos do modelo.
-As citações em `message` incluem o nome da fonte, UUID do documento, ordinal do trecho e intervalo de linhas.
+As citações em `message` incluem nome da fonte, UUID do documento, ordinal do trecho, linhas e página quando houver.
 O modelo não fornece nomes de fontes, localizações ou texto factual para renderização. IDs desconhecidos, repetidos,
 fontes apenas do histórico e campos adicionais na resposta são rejeitados com `MODEL_INVALID_RESPONSE`.
 
@@ -202,5 +268,8 @@ O agente mantém o acesso exclusivo à conversa durante recuperação e seleçã
 O fluxo continua responsável por consumir a autoridade de propostas antes do modelo, aplicar a intenção e salvar
 histórico somente após uma resposta válida. Consultar o acervo não confirma nem cria agendamentos; falha de validação
 ou cancelamento preserva o rollback do turno e não restaura autoridade consumida. Trechos e validadores permanecem
-locais ao turno, sem referências de fontes persistidas como autorização. Médicos, especialidades, vagas e reservas
+locais ao turno, sem referências de fontes persistidas como autorização. Durante a seleção de evidências documentais,
+nenhuma ferramenta fica disponível e qualquer tool call é rejeitada antes da execução. Instruções no documento não
+alteram regras, não autorizam mutações e não podem remover citações; o servidor controla texto e localização exibidos.
+Médicos, especialidades, vagas e reservas
 continuam vindo das ferramentas determinísticas; aconselhamento médico continua fora do escopo.

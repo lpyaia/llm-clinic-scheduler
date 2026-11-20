@@ -77,6 +77,8 @@ type ReturnToModel struct {
 	ResponseSchema contract.ResponseSchema
 	Instructions   string
 	Finalize       AnswerFinalizer
+	// AnswerOnly removes tool capabilities while the model reads untrusted document content.
+	AnswerOnly bool
 }
 
 func (ReturnToModel) toolOutcome() {}
