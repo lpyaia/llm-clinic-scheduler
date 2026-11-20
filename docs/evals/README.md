@@ -1,5 +1,8 @@
 # Avaliações de conversa em português
 
+Para avaliar a busca documental com recall@k, acervo controlado e relevância por posição, veja
+[Avaliação de recuperação](retrieval.md). O executor de recuperação é separado do modelo conversacional.
+
 ## Executor reproduzível (#18)
 
 Execute na raiz do repositório, sem PostgreSQL, servidor ou credenciais:

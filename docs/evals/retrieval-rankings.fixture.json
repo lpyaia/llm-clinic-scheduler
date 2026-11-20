@@ -1,0 +1,126 @@
+{
+  "dataset_sha256": "ab0fa71b12f6833d02040fff99dfe84e444a41506f3aefd935124424a11a2911",
+  "rankings": {
+    "estacionamento": [
+      {
+        "source": "acesso.md",
+        "chunk": 1,
+        "text": "Há estacionamento gratuito na entrada lateral."
+      },
+      {
+        "source": "equipe.md",
+        "chunk": 1,
+        "text": "A equipe usa crachá verde na recepção."
+      }
+    ],
+    "rampa": [
+      {
+        "source": "acesso.md",
+        "chunk": 1,
+        "text": "Há estacionamento gratuito na entrada lateral."
+      },
+      {
+        "source": "acesso.md",
+        "chunk": 2,
+        "text": "A recepção no térreo tem rampa de acesso."
+      }
+    ],
+    "chegada": [
+      {
+        "source": "visita.md",
+        "chunk": 1,
+        "text": "Chegue 15 minutos antes do horário."
+      }
+    ],
+    "documentos": [
+      {
+        "source": "visita.md",
+        "chunk": 2,
+        "text": "Traga documento com foto e confirmação do agendamento."
+      },
+      {
+        "source": "acesso.md",
+        "chunk": 1,
+        "text": "Há estacionamento gratuito na entrada lateral."
+      },
+      {
+        "source": "pagamento.md",
+        "chunk": 1,
+        "text": "Aceitamos Pix e cartão de débito."
+      },
+      {
+        "source": "ultrassom.md",
+        "chunk": 1,
+        "text": "No ultrassom abdominal, traga o formulário azul."
+      }
+    ],
+    "pagamento": [
+      {
+        "source": "pagamento.md",
+        "chunk": 1,
+        "text": "Aceitamos Pix e cartão de débito."
+      },
+      {
+        "source": "pagamento.md",
+        "chunk": 2,
+        "text": "Peça o valor da consulta à recepção; não há tabela aqui."
+      }
+    ],
+    "visita": [
+      {
+        "source": "acesso.md",
+        "chunk": 1,
+        "text": "Há estacionamento gratuito na entrada lateral."
+      },
+      {
+        "source": "acesso.md",
+        "chunk": 2,
+        "text": "A recepção no térreo tem rampa de acesso."
+      },
+      {
+        "source": "equipe.md",
+        "chunk": 1,
+        "text": "A equipe usa crachá verde na recepção."
+      },
+      {
+        "source": "visita.md",
+        "chunk": 1,
+        "text": "Chegue 15 minutos antes do horário."
+      }
+    ],
+    "convenio": [
+      {
+        "source": "convenio.md",
+        "chunk": 1,
+        "text": "O plano fictício Ipê Azul cobre consultas."
+      }
+    ],
+    "preparo": [
+      {
+        "source": "ultrassom.md",
+        "chunk": 1,
+        "text": "No ultrassom abdominal, traga o formulário azul."
+      }
+    ],
+    "piscina": [
+      {
+        "source": "equipe.md",
+        "chunk": 1,
+        "text": "A equipe usa crachá verde na recepção."
+      },
+      {
+        "source": "acesso.md",
+        "chunk": 1,
+        "text": "Há estacionamento gratuito na entrada lateral."
+      }
+    ],
+    "preco": [
+      {
+        "source": "pagamento.md",
+        "chunk": 2,
+        "text": "Peça o valor da consulta à recepção; não há tabela aqui."
+      }
+    ],
+    "academia": []
+  }
+}
