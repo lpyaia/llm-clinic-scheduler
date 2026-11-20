@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"syscall"
 
-	"github.com/google/uuid"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/adapters/openai"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/config"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/infrastructure/postgres"
@@ -29,22 +28,21 @@ func main() {
 
 func run(args []string, output io.Writer) error {
 	if len(args) == 0 || (args[0] != "ingest" && args[0] != "search") {
-		return errors.New("use: knowledge ingest -file <faq.md> | search -document <uuid> -question <text> [-limit 3]")
+		return errors.New("use: knowledge ingest -file <faq.md> | search -question <text> [-limit 3]")
 	}
 
 	flags := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	flags.SetOutput(output)
 
 	var (
-		path, document, question string
-		limit                    int
+		path, question string
+		limit          int
 	)
 
 	if args[0] == "ingest" {
 		flags.StringVar(&path, "file", "", "UTF-8 .md or .txt document (maximum 64 KiB)")
 	} else {
-		flags.StringVar(&document, "document", "", "document UUID returned by ingest")
-		flags.StringVar(&question, "question", "", "question to retrieve relevant excerpts")
+		flags.StringVar(&question, "question", "", "question to search across the clinic corpus")
 		flags.IntVar(&limit, "limit", 3, "maximum results (1..100)")
 	}
 
@@ -120,12 +118,7 @@ func run(args []string, output io.Writer) error {
 		return encoder.Encode(doc)
 	}
 
-	id, err := uuid.Parse(document)
-	if err != nil {
-		return knowledge.ErrInput
-	}
-
-	results, err := service.Search(ctx, id, question, limit)
+	results, err := service.Search(ctx, question, limit)
 	if err != nil {
 		return err
 	}

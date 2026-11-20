@@ -20,10 +20,9 @@ var (
 	ErrEmbeddings    = errors.New("embedding generation failed")
 	ErrConfiguration = errors.New("invalid embedding configuration")
 	ErrIncompatible  = errors.New(
-		"embedding configuration differs from the document; re-ingest with this configuration",
+		"embedding configuration differs within the clinic corpus; rebuild the corpus with one configuration",
 	)
-	ErrInput    = errors.New("invalid document, question or result limit (1..100)")
-	ErrNotFound = errors.New("document not found")
+	ErrInput = errors.New("invalid document, question or result limit (1..100)")
 )
 
 type EmbeddingConfig struct {
@@ -98,12 +97,14 @@ type Embedder interface {
 	Embed(context.Context, EmbeddingConfig, []string) ([][]float32, error)
 }
 
-// Repository saves a complete immutable document atomically. Search must enforce the recorded
-// configuration before comparing vectors. Failed writes leave no document or partial chunks.
+// Repository saves complete immutable documents atomically. CorpusConfig returns nil for an empty corpus
+// and ErrIncompatible for mixed configurations. SearchCorpus must reject incompatible configurations
+// before comparing vectors. SaveDocument serializes the configuration check with insertion, so
+// concurrent imports cannot establish different configurations. Failed writes leave no partial state.
 type Repository interface {
 	SaveDocument(context.Context, Document, []Chunk) error
-	DocumentConfig(context.Context, uuid.UUID) (EmbeddingConfig, error)
-	SearchDocument(context.Context, uuid.UUID, EmbeddingConfig, []float32, int) ([]Result, error)
+	CorpusConfig(context.Context) (*EmbeddingConfig, error)
+	SearchCorpus(context.Context, EmbeddingConfig, []float32, int) ([]Result, error)
 }
 
 type Service struct {
@@ -135,6 +136,10 @@ func (s *Service) Ingest(ctx context.Context, source string, input io.Reader) (D
 		return Document{}, fmt.Errorf("%w: maximum 256 chunks", ErrExtraction)
 	}
 
+	if _, err := s.validateCorpus(ctx); err != nil {
+		return Document{}, err
+	}
+
 	texts := make([]string, len(chunks))
 	for i, chunk := range chunks {
 		texts[i] = chunk.Text
@@ -160,20 +165,20 @@ func (s *Service) Ingest(ctx context.Context, source string, input io.Reader) (D
 	return doc, nil
 }
 
-func (s *Service) Search(ctx context.Context, id uuid.UUID, question string, limit int) ([]Result, error) {
+func (s *Service) Search(ctx context.Context, question string, limit int) ([]Result, error) {
 	question = strings.TrimSpace(question)
-	if id == uuid.Nil || question == "" || !utf8.ValidString(question) || utf8.RuneCountInString(question) > 1000 ||
+	if question == "" || !utf8.ValidString(question) || utf8.RuneCountInString(question) > 1000 ||
 		limit < 1 || limit > 100 {
 		return nil, ErrInput
 	}
 
-	cfg, err := s.repo.DocumentConfig(ctx, id)
+	hasDocuments, err := s.validateCorpus(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	if cfg != s.config {
-		return nil, ErrIncompatible
+	if !hasDocuments {
+		return []Result{}, nil
 	}
 
 	vectors, err := s.embed(ctx, []string{question})
@@ -181,7 +186,25 @@ func (s *Service) Search(ctx context.Context, id uuid.UUID, question string, lim
 		return nil, err
 	}
 
-	return s.repo.SearchDocument(ctx, id, s.config, vectors[0], limit)
+	return s.repo.SearchCorpus(ctx, s.config, vectors[0], limit)
+}
+
+// validateCorpus returns whether documents exist and rejects any incompatible corpus configuration.
+func (s *Service) validateCorpus(ctx context.Context) (bool, error) {
+	cfg, err := s.repo.CorpusConfig(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	if cfg == nil {
+		return false, nil
+	}
+
+	if *cfg != s.config {
+		return false, ErrIncompatible
+	}
+
+	return true, nil
 }
 
 func (s *Service) embed(ctx context.Context, texts []string) ([][]float32, error) {

@@ -1,7 +1,8 @@
 # Ingestão e recuperação de documentos da clínica
 
 A entrega de #20 demonstra recuperação antes da integração ao agente. O operador importa um FAQ e pesquisa
-trechos classificados por similaridade de cosseno, com documento, texto e linhas para conferência da fonte.
+trechos de todo o acervo classificados por similaridade de cosseno, com documento, texto e linhas para conferir
+as fontes. A busca recebe somente a pergunta e o limite; o operador não precisa escolher um documento.
 
 ## Executar
 
@@ -39,32 +40,35 @@ $imported = go run ./cmd/knowledge ingest -file docs/knowledge/faq-simulated.md 
 if ($LASTEXITCODE -ne 0) { throw 'Falha na ingestão' }
 $imported
 
-go run ./cmd/knowledge search -document $imported.id -question 'Posso estacionar na clínica?' -limit 3
-go run ./cmd/knowledge search -document $imported.id -question 'A recepção abre no sábado?' -limit 3
+go run ./cmd/knowledge search -question 'Posso estacionar na clínica?' -limit 3
+go run ./cmd/knowledge search -question 'A recepção abre no sábado?' -limit 3
 ```
 
 Cada resultado JSON contém `document_id`, `source`, `chunk` (ordinal a partir de 1), `text`, `start_line`,
-`end_line` e `similarity`. Similaridade maior aparece primeiro; empates seguem a ordem dos chunks na fonte.
+`end_line` e `similarity`. Similaridade maior aparece primeiro; empates seguem o UUID do documento e o ordinal do chunk.
+O limite é global: os resultados podem vir de vários documentos.
 Na primeira pergunta, confira o trecho “Há estacionamento?”; na segunda, “Qual é o horário de atendimento?”.
 Os valores de similaridade dependem do modelo; não são probabilidades nem uma garantia de relevância.
 O comando apresenta trechos recuperados, sem compor uma resposta clínica ou aplicar limiar de abstention.
 
-Guarde o `id` retornado para pesquisar após reiniciar o processo. Cada importação cria um documento novo e imutável;
-reimportar não substitui documentos anteriores. A busca usa somente o documento escolhido.
+O `id` retornado identifica a fonte nas citações; ele não é um argumento da busca. Os documentos continuam
+pesquisáveis após reiniciar o processo. Cada importação cria um documento novo e imutável; reimportar não substitui
+documentos anteriores e pode produzir resultados duplicados. Substituição de documentos pertence à issue #22.
 
 ## FAQ fictício de convênios
 
 O arquivo [faq-convenios-simulated.md](faq-convenios-simulated.md) apresenta planos inventados, modalidades de
 atendimento, documentos, autorização, coparticipação e reembolso. Todas as condições fazem parte da demonstração.
-Importe esse arquivo separadamente e use o ID retornado para consultar seus trechos:
+Importe esse arquivo para acrescentá-lo ao mesmo acervo. As perguntas abaixo pesquisam todos os documentos
+ingeridos, incluindo o FAQ geral:
 
 ```powershell
 $convenios = go run ./cmd/knowledge ingest -file docs/knowledge/faq-convenios-simulated.md | ConvertFrom-Json
 if ($LASTEXITCODE -ne 0) { throw 'Falha na ingestão do FAQ de convênios' }
 
-go run ./cmd/knowledge search -document $convenios.id -question 'Quais planos vocês aceitam?' -limit 3
-go run ./cmd/knowledge search -document $convenios.id -question 'O Ipê Azul Básico inclui exames?' -limit 3
-go run ./cmd/knowledge search -document $convenios.id -question 'Meu plano não está na lista. Posso pagar?' -limit 3
+go run ./cmd/knowledge search -question 'Quais planos vocês aceitam?' -limit 3
+go run ./cmd/knowledge search -question 'O Ipê Azul Básico inclui exames?' -limit 3
+go run ./cmd/knowledge search -question 'Meu plano não está na lista. Posso pagar?' -limit 3
 ```
 
 Confira, respectivamente, os trechos sobre convênios aceitos, cobertura do Ipê Azul Básico e atendimento particular.
@@ -88,8 +92,8 @@ Importe cada arquivo desejado separadamente, usando o mesmo procedimento do FAQ 
 $atendimento = go run ./cmd/knowledge ingest -file docs/knowledge/faq-atendimento-simulated.md | ConvertFrom-Json
 if ($LASTEXITCODE -ne 0) { throw 'Falha na ingestão do FAQ de atendimento' }
 
-go run ./cmd/knowledge search -document $atendimento.id -question 'Vocês abrem aos domingos?' -limit 3
-go run ./cmd/knowledge search -document $atendimento.id -question 'Com quanto tempo de antecedência chego?' -limit 3
+go run ./cmd/knowledge search -question 'Vocês abrem aos domingos?' -limit 3
+go run ./cmd/knowledge search -question 'Com quanto tempo de antecedência chego?' -limit 3
 ```
 
 Para conferir os demais documentos, use perguntas com palavras diferentes das usadas nos títulos:
@@ -105,9 +109,9 @@ Para conferir os demais documentos, use perguntas com palavras diferentes das us
 | Acessibilidade | Preciso subir escadas para chegar à recepção? | Entrada com rampa e recepção no térreo |
 | Acessibilidade | Onde deixo o carro e quanto custa? | Estacionamento gratuito e entrada de veículos |
 
-As perguntas são exemplos para inspeção manual, sem garantia de ranking do fornecedor real. Use sempre o ID do
-documento correspondente: importar vários arquivos não habilita uma busca conjunta entre eles. Os exemplos sobre
-preços e recursos não confirmados também permitem verificar se a fonte realmente contém a informação procurada.
+As perguntas são exemplos para inspeção manual, sem garantia de ranking do fornecedor real. Importe todos os FAQs
+que deseja pesquisar e faça as perguntas sem informar o documento. Uma pergunta pode recuperar trechos de fontes
+diferentes. Os exemplos sobre preços e recursos não confirmados permitem conferir se há suporte na fonte.
 
 ## Extração, chunking e falhas
 
@@ -120,12 +124,15 @@ preços e recursos não confirmados também permitem verificar se a fonte realme
 - Embeddings são gerados antes da transação. Falha do fornecedor, quantidade incorreta de vetores, dimensão errada,
   NaN, infinito e vetores zero interrompem a ingestão. Documento e chunks são gravados em uma única transação;
   falha de banco desfaz toda a gravação. Contexto cancelado e `COMMAND_TIMEOUT` interrompem a operação.
-- Provider, modelo e dimensões ficam registrados por documento. Uma busca com configuração diferente retorna
-  `embedding configuration differs from the document`; reimporte o documento para usar outra configuração.
-  O banco também verifica dimensões por chunk e sua correspondência com o documento.
-- Documento desconhecido retorna `document not found`. Pergunta vazia, maior que 1000 caracteres Unicode, UUID
-  inválido ou limite fora de 1..100 são rejeitados. Erros saem em stderr e o processo termina com código
-  diferente de zero.
+- O acervo usa uma única configuração de provider, modelo e dimensões. O primeiro documento importado estabelece
+  essa configuração. Ingestões e buscas incompatíveis retornam `embedding configuration differs within the clinic
+  corpus`; alterar a `.env` não converte vetores existentes. Dados legados misturados também causam esse erro,
+  sem pesquisar silenciosamente apenas uma parte do acervo. O banco verifica ainda as dimensões de cada chunk.
+- Para mudar o modelo ou as dimensões, reconstrua o acervo inteiro com uma única configuração. Reimportar com outra
+  configuração no mesmo acervo é rejeitado; esta entrega não oferece conversão nem limpeza automática.
+  Documentos anteriores compatíveis continuam funcionando sem nova migration.
+- Um acervo vazio retorna `[]` sem solicitar embeddings. Pergunta vazia, maior que 1000 caracteres Unicode ou limite
+  fora de 1..100 são rejeitados. Erros saem em stderr e o processo termina com código diferente de zero.
 
 A busca faz varredura exata com distância de cosseno no PostgreSQL; esta fatia não adiciona índices aproximados.
 Conteúdo e localização vêm da fonte persistida. Alterar o arquivo local após a ingestão não altera o documento salvo.
@@ -138,15 +145,20 @@ Conteúdo e localização vêm da fonte persistida. Alterar o arquivo local apó
 ```
 
 Os testes usam PostgreSQL/pgvector real em `TEST_DATABASE_URL`, com um schema isolado por teste, e embeddings
-controlados de três dimensões. Verificam persistência, ranking conhecido, citações, extração e incompatibilidades.
+controlados de três dimensões. Verificam ranking global entre documentos, citações, acervo vazio, extração,
+incompatibilidades legadas, ingestões concorrentes e rollback após falhar a inserção do segundo chunk.
 Os testes HTTP usam um provedor local simulado para validar o contrato, erros e respostas malformadas.
 Não demonstram a qualidade semântica do fornecedor real; as perguntas do roteiro permitem inspecioná-la manualmente.
 
 ## Coordenação
 
-`knowledge.Service` sequencia extração → chunking → embeddings → gravação atômica. O repositório PostgreSQL mantém
-a transação somente durante a gravação, sem chamada externa sob lock. Na busca, o serviço valida a entrada, consulta
-somente a configuração persistida e a confere antes de gerar o embedding da pergunta. A consulta dos chunks também
-filtra a configuração no SQL antes de comparar vetores, sem repetir a leitura de metadados quando há resultados.
-Documentos são imutáveis nesta entrega. Falhas anteriores à gravação não criam estado; falhas durante a gravação
-fazem rollback.
+`knowledge.Service` sequencia extração → chunking → validação do acervo → embeddings → gravação atômica.
+O repositório PostgreSQL adquire `SHARE ROW EXCLUSIVE` na tabela de documentos durante a transação e confere de novo
+sua configuração antes de inserir. Isso serializa ingestões, inclusive as primeiras importações concorrentes,
+sem manter locks durante chamadas externas nem bloquear buscas comuns. Se duas primeiras ingestões tiverem
+configurações diferentes, uma conclui e a outra retorna incompatibilidade; ambas podem já ter gerado embeddings.
+
+Na busca, o módulo confere a configuração do acervo antes de gerar o vetor da pergunta. A consulta SQL repete a guarda
+de compatibilidade no mesmo snapshot da comparação e ordena os chunks de todos os documentos. O caminho normal
+faz duas consultas ao banco e uma chamada ao fornecedor. Uma consulta sem resultados reconfere a configuração para
+distinguir incompatibilidade de acervo vazio. Documentos são imutáveis; falhas na gravação fazem rollback.

@@ -9,6 +9,7 @@ import (
 	"math"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/knowledge"
@@ -45,6 +46,225 @@ func (fn embeddingFunc) Embed(
 type unreadableDocument struct{}
 
 func (unreadableDocument) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }
+
+func TestKnowledgeSearchRanksAcrossDocuments(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: "faq-v1", Dimensions: 3}
+	service, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	parking, err := service.Ingest(ctx, "acesso.md", strings.NewReader("\nO estacionamento é gratuito."))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bus, err := service.Ingest(ctx, "transporte.md", strings.NewReader("Há ônibus na porta."))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := service.Ingest(ctx, "horarios.md", strings.NewReader("Atendemos das 8h às 18h.")); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := service.Search(ctx, "Tem estacionamento?", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(results) != 2 || results[0].DocumentID != parking.ID || results[1].DocumentID != bus.ID ||
+		results[0].Text != "O estacionamento é gratuito." || results[1].Text != "Há ônibus na porta." ||
+		results[0].Source != "acesso.md" || results[1].Source != "transporte.md" ||
+		results[0].StartLine != 2 || results[0].EndLine != 2 || results[1].StartLine != 1 ||
+		results[0].Similarity < 0.999 || results[1].Similarity < 0.799 || results[1].Similarity > 0.801 {
+		t.Fatalf("unexpected corpus ranking or citations: %+v", results)
+	}
+}
+
+func TestKnowledgeEmptyCorpusReturnsNoResults(t *testing.T) {
+	f := setup(t)
+	cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: "faq-v1", Dimensions: 3}
+	embedder := embeddingFunc(func(context.Context, knowledge.EmbeddingConfig, []string) ([][]float32, error) {
+		return nil, errors.New("an empty corpus must not request embeddings")
+	})
+	service, err := knowledge.New(f.store, embedder, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := service.Search(context.Background(), "Tem estacionamento?", 3)
+	if err != nil || results == nil || len(results) != 0 {
+		t.Fatalf("empty corpus results=%+v, error=%v", results, err)
+	}
+}
+
+func TestKnowledgeRejectsLegacyMixedCorpus(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: "faq-v1", Dimensions: 3}
+	service, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := service.Ingest(ctx, "acesso.md", strings.NewReader("estacionamento")); err != nil {
+		t.Fatal(err)
+	}
+
+	other, err := service.Ingest(ctx, "transporte.md", strings.NewReader("ônibus"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate documents imported by the previous version, which permitted separate configurations.
+	f.must(f.store.db.Exec("UPDATE clinic_documents SET model = 'legacy-model' WHERE id = ?", other.ID).Error)
+
+	if _, err := service.Search(ctx, "estacionamento", 3); !errors.Is(err, knowledge.ErrIncompatible) {
+		t.Fatalf("mixed corpus must fail instead of silently searching a compatible subset: %v", err)
+	}
+
+	if _, err := service.Ingest(
+		ctx,
+		"new.md",
+		strings.NewReader("new text"),
+	); !errors.Is(
+		err,
+		knowledge.ErrIncompatible,
+	) {
+		t.Fatalf("mixed corpus must reject further imports: %v", err)
+	}
+}
+
+func TestKnowledgeConcurrentFirstImportsKeepOneConfiguration(t *testing.T) {
+	f := setup(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	ready := make(chan struct{}, 2)
+	release := make(chan struct{})
+	embedder := embeddingFunc(func(
+		ctx context.Context, cfg knowledge.EmbeddingConfig, texts []string,
+	) ([][]float32, error) {
+		ready <- struct{}{}
+
+		select {
+		case <-release:
+			return (controlledEmbeddings{}).Embed(ctx, cfg, texts)
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	})
+
+	type outcome struct {
+		doc knowledge.Document
+		err error
+	}
+
+	completed := make(chan outcome, 2)
+	for _, model := range []string{"faq-v1", "faq-v2"} {
+		cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: model, Dimensions: 3}
+		service, err := knowledge.New(f.store, embedder, cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		go func() {
+			doc, err := service.Ingest(ctx, model+".md", strings.NewReader("estacionamento"))
+			completed <- outcome{doc: doc, err: err}
+		}()
+	}
+
+	// Hold both external responses until each import has observed the empty corpus.
+	for range 2 {
+		select {
+		case <-ready:
+		case <-ctx.Done():
+			t.Fatal("imports did not reach the embedding provider before the deadline")
+		}
+	}
+
+	close(release)
+
+	var winner knowledge.Document
+	var successful, incompatible int
+
+	for range 2 {
+		result := <-completed
+		switch {
+		case result.err == nil:
+			winner = result.doc
+			successful++
+		case errors.Is(result.err, knowledge.ErrIncompatible):
+			incompatible++
+		default:
+			t.Fatalf("unexpected concurrent import failure: %v", result.err)
+		}
+	}
+
+	if successful != 1 || incompatible != 1 {
+		t.Fatalf("successful=%d, incompatible=%d; expected one of each", successful, incompatible)
+	}
+
+	reader, err := knowledge.New(f.store, controlledEmbeddings{}, winner.EmbeddingConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := reader.Search(ctx, "estacionamento", 10)
+	if err != nil || len(results) != 1 || results[0].DocumentID != winner.ID {
+		t.Fatalf("concurrent imports left an inconsistent corpus: %+v, %v", results, err)
+	}
+}
+
+func TestKnowledgeChunkWriteFailureRollsBackWholeDocument(t *testing.T) {
+	f := setup(t)
+	cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: "faq-v1", Dimensions: 3}
+	service, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Inject a database failure after the document and first chunk have been inserted.
+	f.must(f.store.db.Exec(`
+		CREATE FUNCTION reject_second_chunk() RETURNS trigger LANGUAGE plpgsql AS $$
+		BEGIN
+		    IF NEW.ordinal = 2 THEN
+		        RAISE EXCEPTION 'simulated chunk write failure';
+		    END IF;
+		    RETURN NEW;
+		END;
+		$$
+	`).Error)
+	f.must(f.store.db.Exec(`
+		CREATE TRIGGER reject_second_chunk BEFORE INSERT ON clinic_document_chunks
+		FOR EACH ROW EXECUTE FUNCTION reject_second_chunk()
+	`).Error)
+
+	doc, err := service.Ingest(context.Background(), "failed.md", strings.NewReader("first\n\nsecond"))
+	if err == nil || doc.ID != uuid.Nil {
+		t.Fatalf("expected failed import: document=%+v, error=%v", doc, err)
+	}
+
+	results, err := service.Search(context.Background(), "first", 10)
+	if err != nil || len(results) != 0 {
+		t.Fatalf("failed transaction left a document or partial chunks: %+v, %v", results, err)
+	}
+
+	// A different model can establish the still-empty corpus after the failed transaction.
+	f.must(f.store.db.Exec("DROP TRIGGER reject_second_chunk ON clinic_document_chunks").Error)
+	cfg.Model = "faq-v2"
+	retry, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := retry.Ingest(context.Background(), "retry.md", strings.NewReader("estacionamento")); err != nil {
+		t.Fatalf("rolled-back import retained its configuration: %v", err)
+	}
+}
 
 func TestKnowledgeRejectsUnreadableAndEmptyDocuments(t *testing.T) {
 	f := setup(t)
@@ -84,7 +304,7 @@ func TestKnowledgeRejectsInvalidEmbeddings(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	existing, err := working.Ingest(context.Background(), "existing.txt", strings.NewReader("estacionamento"))
+	_, err = working.Ingest(context.Background(), "existing.txt", strings.NewReader("estacionamento"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +337,6 @@ func TestKnowledgeRejectsInvalidEmbeddings(t *testing.T) {
 
 			if _, err := service.Search(
 				context.Background(),
-				existing.ID,
 				"parking",
 				1,
 			); !errors.Is(
@@ -129,7 +348,7 @@ func TestKnowledgeRejectsInvalidEmbeddings(t *testing.T) {
 		})
 	}
 
-	results, err := working.Search(context.Background(), existing.ID, "estacionamento", 1)
+	results, err := working.Search(context.Background(), "estacionamento", 1)
 	if err != nil || len(results) != 1 || results[0].Text != "estacionamento" {
 		t.Fatalf("embedding failures changed the existing document: %+v, %v", results, err)
 	}
@@ -144,7 +363,7 @@ func TestKnowledgeRejectsIncompatibleSearchAndConfiguration(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	doc, err := service.Ingest(ctx, "faq.txt", strings.NewReader("O estacionamento é gratuito."))
+	_, err = service.Ingest(ctx, "faq.txt", strings.NewReader("O estacionamento é gratuito."))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,8 +378,13 @@ func TestKnowledgeRejectsIncompatibleSearchAndConfiguration(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if _, err := other.Search(ctx, doc.ID, "estacionamento", 3); !errors.Is(err, knowledge.ErrIncompatible) {
+		if _, err := other.Search(ctx, "estacionamento", 3); !errors.Is(err, knowledge.ErrIncompatible) {
 			t.Fatalf("configuration %+v: %v", changed, err)
+		}
+
+		doc, err := other.Ingest(ctx, "incompatible.txt", strings.NewReader("new document"))
+		if !errors.Is(err, knowledge.ErrIncompatible) || doc.ID != uuid.Nil {
+			t.Fatalf("incompatible import: document=%+v, error=%v", doc, err)
 		}
 	}
 
@@ -181,11 +405,7 @@ func TestKnowledgeRejectsIncompatibleSearchAndConfiguration(t *testing.T) {
 		}
 	}
 
-	if _, err := service.Search(ctx, uuid.New(), "estacionamento", 1); !errors.Is(err, knowledge.ErrNotFound) {
-		t.Fatalf("missing document error=%v", err)
-	}
-
-	if _, err := service.Search(ctx, doc.ID, " ", 1); !errors.Is(err, knowledge.ErrInput) {
+	if _, err := service.Search(ctx, " ", 1); !errors.Is(err, knowledge.ErrInput) {
 		t.Fatalf("empty question error=%v", err)
 	}
 }
@@ -199,12 +419,12 @@ func TestKnowledgePreservesLongUnicodeLinesAndCRLFCitations(t *testing.T) {
 	}
 
 	content := "\ufeff\r\n" + strings.Repeat("á", 1005) + "\r\nfinal\r\n"
-	doc, err := service.Ingest(context.Background(), "faq.txt", strings.NewReader(content))
+	_, err = service.Ingest(context.Background(), "faq.txt", strings.NewReader(content))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	results, err := service.Search(context.Background(), doc.ID, "horários", 10)
+	results, err := service.Search(context.Background(), "horários", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,13 +444,13 @@ func TestKnowledgeHandlesWhitespaceAtChunkBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	doc, err := service.Ingest(context.Background(), "faq.txt",
+	_, err = service.Ingest(context.Background(), "faq.txt",
 		strings.NewReader(strings.Repeat(" ", 1000)+"FAQ"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	results, err := service.Search(context.Background(), doc.ID, "FAQ", 10)
+	results, err := service.Search(context.Background(), "FAQ", 10)
 	if err != nil || len(results) != 1 || results[0].Text != "FAQ" || results[0].StartLine != 1 {
 		t.Fatalf("unexpected whitespace handling: %+v, %v", results, err)
 	}
@@ -244,7 +464,7 @@ func TestKnowledgeCancelledPersistencePreservesExistingDocument(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	doc, err := service.Ingest(context.Background(), "existing.txt", strings.NewReader("estacionamento"))
+	_, err = service.Ingest(context.Background(), "existing.txt", strings.NewReader("estacionamento"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,7 +490,7 @@ func TestKnowledgeCancelledPersistencePreservesExistingDocument(t *testing.T) {
 		t.Fatalf("cancelled write returned document=%+v, error=%v", failed, err)
 	}
 
-	results, err := service.Search(context.Background(), doc.ID, "estacionamento", 1)
+	results, err := service.Search(context.Background(), "estacionamento", 1)
 	if err != nil || len(results) != 1 || results[0].Text != "estacionamento" {
 		t.Fatalf("cancelled write changed the existing document: %+v, %v", results, err)
 	}
@@ -297,7 +517,7 @@ func TestKnowledgeIngestionAndRankedCitations(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	results, err := reader.Search(ctx, doc.ID, "Tem estacionamento?", 3)
+	results, err := reader.Search(ctx, "Tem estacionamento?", 3)
 	if err != nil {
 		t.Fatal(err)
 	}

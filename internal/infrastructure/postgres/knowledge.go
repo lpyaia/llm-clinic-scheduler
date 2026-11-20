@@ -2,11 +2,9 @@ package postgres
 
 import (
 	"context"
-	"errors"
 	"strconv"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/knowledge"
 	"gorm.io/gorm"
 )
@@ -15,7 +13,22 @@ var _ knowledge.Repository = (*Store)(nil)
 
 func (s *Store) SaveDocument(ctx context.Context, doc knowledge.Document, chunks []knowledge.Chunk) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Serialize corpus configuration checks and imports, including concurrent first documents.
+		// Ordinary searches remain available; external embedding calls happen before this transaction.
+		if err := tx.Exec("LOCK TABLE clinic_documents IN SHARE ROW EXCLUSIVE MODE").Error; err != nil {
+			return err
+		}
+
+		recorded, err := corpusConfig(tx)
+		if err != nil {
+			return err
+		}
+
 		cfg := doc.EmbeddingConfig
+		if recorded != nil && *recorded != cfg {
+			return knowledge.ErrIncompatible
+		}
+
 		if err := tx.Exec(`
 			INSERT INTO clinic_documents (id, source, content, provider, model, dimensions, chunk_count)
 			VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -44,20 +57,31 @@ func (s *Store) SaveDocument(ctx context.Context, doc knowledge.Document, chunks
 	})
 }
 
-func (s *Store) DocumentConfig(ctx context.Context, id uuid.UUID) (knowledge.EmbeddingConfig, error) {
-	var cfg knowledge.EmbeddingConfig
-
-	err := s.db.WithContext(ctx).Table("clinic_documents").
-		Select("provider, model, dimensions").Where("id = ?", id).Take(&cfg).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return knowledge.EmbeddingConfig{}, knowledge.ErrNotFound
-	}
-
-	return cfg, err
+func (s *Store) CorpusConfig(ctx context.Context) (*knowledge.EmbeddingConfig, error) {
+	return corpusConfig(s.db.WithContext(ctx))
 }
 
-func (s *Store) SearchDocument(
-	ctx context.Context, id uuid.UUID, cfg knowledge.EmbeddingConfig, vector []float32, limit int,
+func corpusConfig(db *gorm.DB) (*knowledge.EmbeddingConfig, error) {
+	var configs []knowledge.EmbeddingConfig
+
+	if err := db.Table("clinic_documents").Distinct("provider", "model", "dimensions").
+		Limit(2).Find(&configs).Error; err != nil {
+		return nil, err
+	}
+
+	if len(configs) == 0 {
+		return nil, nil
+	}
+
+	if len(configs) > 1 {
+		return nil, knowledge.ErrIncompatible
+	}
+
+	return &configs[0], nil
+}
+
+func (s *Store) SearchCorpus(
+	ctx context.Context, cfg knowledge.EmbeddingConfig, vector []float32, limit int,
 ) ([]knowledge.Result, error) {
 	if err := cfg.ValidateVector(vector); err != nil {
 		return nil, err
@@ -69,10 +93,15 @@ func (s *Store) SearchDocument(
 		SELECT c.document_id, d.source, c.ordinal, c.content AS text, c.start_line, c.end_line,
 		       1 - (c.embedding OPERATOR(public.<=>) ?::public.vector) AS similarity
 		FROM clinic_document_chunks c JOIN clinic_documents d ON d.id = c.document_id
-		WHERE d.id = ? AND d.provider = ? AND d.model = ? AND d.dimensions = ?
-		ORDER BY c.embedding OPERATOR(public.<=>) ?::public.vector, c.ordinal
+		WHERE d.provider = ? AND d.model = ? AND d.dimensions = ?
+		  AND NOT EXISTS (
+		      SELECT 1 FROM clinic_documents incompatible
+		      WHERE incompatible.provider <> ? OR incompatible.model <> ? OR incompatible.dimensions <> ?
+		  )
+		ORDER BY c.embedding OPERATOR(public.<=>) ?::public.vector, c.document_id, c.ordinal
 		LIMIT ?`,
-		vectorLiteral(vector), id, cfg.Provider, cfg.Model, cfg.Dimensions, vectorLiteral(vector), limit,
+		vectorLiteral(vector), cfg.Provider, cfg.Model, cfg.Dimensions,
+		cfg.Provider, cfg.Model, cfg.Dimensions, vectorLiteral(vector), limit,
 	).Scan(&results).Error
 	if err != nil {
 		return nil, err
@@ -81,12 +110,12 @@ func (s *Store) SearchDocument(
 	// The SQL guard enforces compatibility without reloading metadata on successful searches.
 	// Resolve an empty result explicitly so an incompatible configuration cannot pass silently.
 	if len(results) == 0 {
-		recorded, err := s.DocumentConfig(ctx, id)
+		recorded, err := s.CorpusConfig(ctx)
 		if err != nil {
 			return nil, err
 		}
 
-		if recorded != cfg {
+		if recorded != nil && *recorded != cfg {
 			return nil, knowledge.ErrIncompatible
 		}
 	}
