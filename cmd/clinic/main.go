@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 	_ "time/tzdata"
@@ -17,6 +18,7 @@ import (
 	"github.com/lpyaia/llm-clinic-scheduler/internal/application"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/config"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/infrastructure/postgres"
+	"github.com/lpyaia/llm-clinic-scheduler/internal/knowledge"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/timeouts"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/trace"
 )
@@ -99,6 +101,18 @@ func run(logger *slog.Logger) error {
 		model := &openai.Client{APIKey: key, Model: env("OPENAI_MODEL", "gpt-4.1-mini")}
 		assistant = agent.New(service, model)
 		assistant.ClinicContact = os.Getenv("CLINIC_CONTACT")
+
+		dimensions, err := strconv.Atoi(env("EMBEDDING_DIMENSIONS", "1536"))
+		if err != nil {
+			return knowledge.ErrConfiguration
+		}
+
+		assistant.Knowledge, err = knowledge.New(store, &openai.Embeddings{APIKey: key}, knowledge.EmbeddingConfig{
+			Provider: "openai", Model: env("EMBEDDING_MODEL", "text-embedding-3-small"), Dimensions: dimensions,
+		})
+		if err != nil {
+			return err
+		}
 
 		if path := os.Getenv("CLINIC_TRACE_FILE"); path != "" {
 			var pricing *trace.Pricing

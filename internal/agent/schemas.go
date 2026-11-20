@@ -34,6 +34,12 @@ var cancelAppointmentSchema string
 //go:embed schemas/offer_human_contact.json
 var offerHumanContactSchema string
 
+//go:embed schemas/search_clinic_knowledge.json
+var searchClinicKnowledgeSchema string
+
+//go:embed schemas/knowledge_answer.json
+var knowledgeAnswerSchema string
+
 var toolSchemas = tools.Schemas{
 	ListAppointments:      json.RawMessage(listSchema),
 	AppointmentAnswer:     json.RawMessage(appointmentAnswerSchema),
@@ -44,4 +50,6 @@ var toolSchemas = tools.Schemas{
 	RescheduleAppointment: json.RawMessage(rescheduleAppointmentSchema),
 	CancelAppointment:     json.RawMessage(cancelAppointmentSchema),
 	OfferHumanContact:     json.RawMessage(offerHumanContactSchema),
+	SearchClinicKnowledge: json.RawMessage(searchClinicKnowledgeSchema),
+	KnowledgeAnswer:       json.RawMessage(knowledgeAnswerSchema),
 }

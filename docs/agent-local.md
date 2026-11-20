@@ -7,6 +7,11 @@ a identidade. Nem o corpo HTTP nem os argumentos da ferramenta aceitam
 `patient_id`. A ferramenta `create_appointment` prepara uma proposta pelo mesmo
 núcleo; a aplicação exige confirmação explícita em uma mensagem posterior.
 
+Perguntas operacionais também usam a sessão: `search_clinic_knowledge` consulta os materiais importados e apresenta
+trechos com documento e linhas, ou informa ausência de suporte e falhas de consulta. Veja o
+[roteiro de respostas com fontes](knowledge/README.md#respostas-conversacionais-com-fontes-21).
+O servidor usa `EMBEDDING_MODEL` e `EMBEDDING_DIMENSIONS` compatíveis com o acervo ingerido.
+
 ## Execução local com OpenAI
 
 1. Crie `.env` a partir de `.env.example` se necessário. Defina `OPENAI_API_KEY`

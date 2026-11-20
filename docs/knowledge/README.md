@@ -1,8 +1,11 @@
 # Ingestão e recuperação de documentos da clínica
 
-A entrega de #20 demonstra recuperação antes da integração ao agente. O operador importa um FAQ e pesquisa
+O operador importa um FAQ e pesquisa
 trechos de todo o acervo classificados por similaridade de cosseno, com documento, texto e linhas para conferir
 as fontes. A busca recebe somente a pergunta e o limite; o operador não precisa escolher um documento.
+
+A integração conversacional de #21 usa esse mesmo acervo por `search_clinic_knowledge`, com respostas citadas
+e abstention. O comando `knowledge search` continua disponível para inspecionar a recuperação isoladamente.
 
 ## Executar
 
@@ -162,3 +165,42 @@ Na busca, o módulo confere a configuração do acervo antes de gerar o vetor da
 de compatibilidade no mesmo snapshot da comparação e ordena os chunks de todos os documentos. O caminho normal
 faz duas consultas ao banco e uma chamada ao fornecedor. Uma consulta sem resultados reconfere a configuração para
 distinguir incompatibilidade de acervo vazio. Documentos são imutáveis; falhas na gravação fazem rollback.
+
+## Respostas conversacionais com fontes (#21)
+
+Importe os FAQs acima e inicie `go run ./cmd/clinic serve`. O servidor usa `EMBEDDING_MODEL` e
+`EMBEDDING_DIMENSIONS` com os mesmos padrões do comando de ingestão; mantenha a configuração compatível com o acervo.
+Na sessão autenticada descrita em [agent-local.md](../agent-local.md), envie estas mensagens a
+`POST /v1/agent/messages`, preservando o `conversation_id`:
+
+| Mensagem | Resultado esperado |
+| --- | --- |
+| Posso estacionar na clínica? | Trecho sobre estacionamento, com documento e linhas da fonte |
+| Vocês têm piscina? | Ausência de suporte nos materiais, sem inferir uma resposta negativa |
+| Quero horários de cardiologia na próxima semana | Disponibilidade real pelo núcleo de agendamento |
+
+Perguntas operacionais consultam até três trechos de todo o acervo. O modelo seleciona os `excerpt_ids` que sustentam
+diretamente a pergunta; similaridade não garante suporte. Uma lista vazia indica abstention. O servidor valida cada ID
+contra a última recuperação do turno e apresenta o texto integral do trecho, sem acrescentar fatos do modelo.
+As citações em `message` incluem o nome da fonte, UUID do documento, ordinal do trecho e intervalo de linhas.
+O modelo não fornece nomes de fontes, localizações ou texto factual para renderização. IDs desconhecidos, repetidos,
+fontes apenas do histórico e campos adicionais na resposta são rejeitados com `MODEL_INVALID_RESPONSE`.
+
+Esta entrega usa respostas extrativas para preservar as condições e ressalvas do material. A seleção semântica de um
+trecho relevante ainda depende do modelo; os testes simulados não demonstram sua qualidade com o fornecedor real.
+Importe materiais administrativos em português e confira as respostas com as fontes. Avaliações de relevância,
+groundedness e citações com modelo real pertencem à fase seguinte.
+
+Acervo vazio ou ausência de suporte produz: “Não encontrei essa informação nos materiais da clínica.”
+Falha de banco, embeddings, incompatibilidade do acervo ou serviço não configurado produz:
+“Não consegui consultar os materiais da clínica agora. Tente novamente mais tarde.”
+Esses resultados são respostas HTTP 200, com `appointments: []`, sem proposta nem disponibilidade.
+Uma falha descarta inclusive resultados parciais e não solicita síntese ao modelo; detalhes internos não são exibidos.
+Cancelamento do contexto interrompe o turno e preserva o tratamento de erro existente.
+
+O agente mantém o acesso exclusivo à conversa durante recuperação e seleção, como nas demais ferramentas.
+O fluxo continua responsável por consumir a autoridade de propostas antes do modelo, aplicar a intenção e salvar
+histórico somente após uma resposta válida. Consultar o acervo não confirma nem cria agendamentos; falha de validação
+ou cancelamento preserva o rollback do turno e não restaura autoridade consumida. Trechos e validadores permanecem
+locais ao turno, sem referências de fontes persistidas como autorização. Médicos, especialidades, vagas e reservas
+continuam vindo das ferramentas determinísticas; aconselhamento médico continua fora do escopo.

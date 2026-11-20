@@ -328,6 +328,10 @@ se estiver vazio, o assistente informa que o canal não está configurado, sem i
 Especialidades escolhidas explicitamente pelo paciente continuam disponíveis para busca administrativa.
 Veja os [cenários de avaliação em português](docs/evals/README.md).
 
+Perguntas operacionais usam `search_clinic_knowledge` e retornam trechos dos materiais importados com documento e
+linhas. Sem suporte, o agente se abstém; falhas de recuperação são informadas sem resposta factual. Configure os
+embeddings e importe os FAQs conforme o [roteiro de conhecimento da clínica](docs/knowledge/README.md).
+
 1. Agente em português, abstração de LLM, tool calling, loop limitado e estado em memória. Tools reutilizam os casos de
    uso; confirmações ficam ligadas ao ID da ação pendente.
 2. Traces, métricas de tokens/latência/custo e avaliações com dataset manual e relógio controlado.
@@ -336,7 +340,7 @@ Veja os [cenários de avaliação em português](docs/evals/README.md).
 5. Conversas e mensagens persistidas, com serialização por conversa.
 6. Adapter WhatsApp com deduplicação de mensagens e domínio independente do canal.
 
-Frontend, RAG, WhatsApp e deployment em produção não fazem parte desta entrega.
+Frontend, WhatsApp e deployment em produção não fazem parte desta entrega.
 
 O [roteiro de traces e métricas](docs/tracing.md) mostra como inspecionar latência, chamadas, tokens e falhas
 por execução. `CLINIC_MODEL_PRICES_FILE` configura a tabela de preços por fornecedor/modelo para estimar custos,

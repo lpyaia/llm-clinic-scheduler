@@ -10,6 +10,7 @@ import (
 	"github.com/lpyaia/llm-clinic-scheduler/internal/agent/tools"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/application"
 	"github.com/lpyaia/llm-clinic-scheduler/internal/domain"
+	"github.com/lpyaia/llm-clinic-scheduler/internal/knowledge"
 )
 
 // Conversation is owned by the conversational flow. Offered slots, an incomplete
@@ -80,6 +81,7 @@ type conversationFlow struct {
 	principal     domain.Principal
 	state         Conversation
 	clinicContact string
+	knowledge     *knowledge.Service
 	handlers      map[string]tools.Executor
 	binding       *proposalBinding
 }
@@ -145,7 +147,7 @@ func (f *conversationFlow) request(message string) (Request, error) {
 	}
 	f.handlers = make(map[string]tools.Executor)
 
-	for _, handler := range tools.New(f.core, toolSchemas) {
+	for _, handler := range tools.New(f.core, f.knowledge, toolSchemas) {
 		definition := handler.Definition()
 		f.handlers[definition.Name] = handler
 	}
@@ -231,7 +233,7 @@ func (f *conversationFlow) executeTool(ctx context.Context, call ToolCall) (tool
 func (f *conversationFlow) availableTools() []Tool {
 	var definitions []Tool
 
-	for _, handler := range tools.New(f.core, toolSchemas) {
+	for _, handler := range tools.New(f.core, f.knowledge, toolSchemas) {
 		definition := handler.Definition()
 		if definition.Name == "respond_to_proposal" && f.binding == nil {
 			continue
