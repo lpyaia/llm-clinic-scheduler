@@ -202,6 +202,12 @@ diferentes. Os exemplos sobre preços e recursos não confirmados permitem confe
 A busca faz varredura exata com distância de cosseno no PostgreSQL; esta fatia não adiciona índices aproximados.
 Conteúdo e localização vêm da fonte persistida. Alterar o arquivo local após a ingestão não altera o documento salvo.
 
+## Avaliar qualidade da recuperação
+
+O [executor de recuperação](../evals/retrieval.md) mede recall@k com perguntas e fontes rotuladas manualmente.
+Usa um acervo de avaliação isolado e registra embedding, configuração, resultados relevantes e fontes ausentes.
+Um fixture demonstra o cálculo sem API; o modo real usa a ingestão e busca de produção com PostgreSQL.
+
 ## Verificar sem credenciais externas
 
 ```powershell

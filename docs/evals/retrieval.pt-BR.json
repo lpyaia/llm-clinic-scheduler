@@ -1,0 +1,247 @@
+{
+  "version": 1,
+  "corpus": {
+    "id": "clinica-simulada-retrieval-v1",
+    "documents": [
+      {
+        "source": "acesso.md",
+        "content": "Há estacionamento gratuito na entrada lateral.\n\nA recepção no térreo tem rampa de acesso.",
+        "metadata": {
+          "topic": "faq",
+          "exam": "",
+          "procedure": "",
+          "doctor": ""
+        }
+      },
+      {
+        "source": "visita.md",
+        "content": "Chegue 15 minutos antes do horário.\n\nTraga documento com foto e confirmação do agendamento.",
+        "metadata": {
+          "topic": "faq",
+          "exam": "",
+          "procedure": "",
+          "doctor": ""
+        }
+      },
+      {
+        "source": "pagamento.md",
+        "content": "Aceitamos Pix e cartão de débito.\n\nPeça o valor da consulta à recepção; não há tabela aqui.",
+        "metadata": {
+          "topic": "faq",
+          "exam": "",
+          "procedure": "",
+          "doctor": ""
+        }
+      },
+      {
+        "source": "convenio.md",
+        "content": "O plano fictício Ipê Azul cobre consultas.\n\nConfirme a autorização do plano na recepção.",
+        "metadata": {
+          "topic": "insurance",
+          "exam": "",
+          "procedure": "",
+          "doctor": ""
+        }
+      },
+      {
+        "source": "ultrassom.md",
+        "content": "No ultrassom abdominal, traga o formulário azul.\n\nEstas são orientações administrativas.",
+        "metadata": {
+          "topic": "preparation",
+          "exam": "Ultrassom abdominal",
+          "procedure": "",
+          "doctor": ""
+        }
+      },
+      {
+        "source": "equipe.md",
+        "content": "A equipe usa crachá verde na recepção.",
+        "metadata": {
+          "topic": "general",
+          "exam": "",
+          "procedure": "",
+          "doctor": ""
+        }
+      }
+    ]
+  },
+  "questions": [
+    {
+      "id": "estacionamento",
+      "text": "Onde deixo o carro e quanto custa?",
+      "filter": {
+        "topic": "",
+        "exam": "",
+        "procedure": "",
+        "doctor": ""
+      },
+      "no_answer": false,
+      "relevant": [
+        {
+          "source": "acesso.md",
+          "chunk": 1
+        }
+      ]
+    },
+    {
+      "id": "rampa",
+      "text": "Consigo chegar à recepção sem escadas?",
+      "filter": {
+        "topic": "",
+        "exam": "",
+        "procedure": "",
+        "doctor": ""
+      },
+      "no_answer": false,
+      "relevant": [
+        {
+          "source": "acesso.md",
+          "chunk": 2
+        }
+      ]
+    },
+    {
+      "id": "chegada",
+      "text": "Quantos minutos antes do horário devo chegar?",
+      "filter": {
+        "topic": "",
+        "exam": "",
+        "procedure": "",
+        "doctor": ""
+      },
+      "no_answer": false,
+      "relevant": [
+        {
+          "source": "visita.md",
+          "chunk": 1
+        }
+      ]
+    },
+    {
+      "id": "documentos",
+      "text": "Que documentos levo na visita e no ultrassom abdominal?",
+      "filter": {
+        "topic": "",
+        "exam": "",
+        "procedure": "",
+        "doctor": ""
+      },
+      "no_answer": false,
+      "relevant": [
+        {
+          "source": "visita.md",
+          "chunk": 2
+        },
+        {
+          "source": "ultrassom.md",
+          "chunk": 1
+        }
+      ]
+    },
+    {
+      "id": "pagamento",
+      "text": "Quais meios de pagamento estão descritos?",
+      "filter": {
+        "topic": "",
+        "exam": "",
+        "procedure": "",
+        "doctor": ""
+      },
+      "no_answer": false,
+      "relevant": [
+        {
+          "source": "pagamento.md"
+        }
+      ]
+    },
+    {
+      "id": "visita",
+      "text": "Como acesso a recepção e o que levo na visita?",
+      "filter": {
+        "topic": "",
+        "exam": "",
+        "procedure": "",
+        "doctor": ""
+      },
+      "no_answer": false,
+      "relevant": [
+        {
+          "source": "acesso.md"
+        },
+        {
+          "source": "visita.md"
+        }
+      ]
+    },
+    {
+      "id": "convenio",
+      "text": "O plano fictício Ipê Azul cobre consultas?",
+      "filter": {
+        "topic": "",
+        "exam": "",
+        "procedure": "",
+        "doctor": ""
+      },
+      "no_answer": false,
+      "relevant": [
+        {
+          "source": "convenio.md",
+          "chunk": 1
+        }
+      ]
+    },
+    {
+      "id": "preparo",
+      "text": "Qual formulário levo para o ultrassom abdominal?",
+      "filter": {
+        "topic": "preparation",
+        "exam": "Ultrassom abdominal",
+        "procedure": "",
+        "doctor": ""
+      },
+      "no_answer": false,
+      "relevant": [
+        {
+          "source": "ultrassom.md",
+          "chunk": 1
+        }
+      ]
+    },
+    {
+      "id": "piscina",
+      "text": "Vocês têm piscina?",
+      "filter": {
+        "topic": "",
+        "exam": "",
+        "procedure": "",
+        "doctor": ""
+      },
+      "no_answer": true,
+      "relevant": []
+    },
+    {
+      "id": "preco",
+      "text": "Qual é o valor exato em reais da consulta?",
+      "filter": {
+        "topic": "",
+        "exam": "",
+        "procedure": "",
+        "doctor": ""
+      },
+      "no_answer": true,
+      "relevant": []
+    },
+    {
+      "id": "academia",
+      "text": "Qual é o horário da academia da clínica?",
+      "filter": {
+        "topic": "",
+        "exam": "",
+        "procedure": "",
+        "doctor": ""
+      },
+      "no_answer": true,
+      "relevant": []
+    }
+  ]
+}
