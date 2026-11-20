@@ -76,7 +76,7 @@ func TestProviderTranslatesToolCallsAndStructuredResponses(t *testing.T) {
 				} `json:"json_schema"`
 			} `json:"response_format"`
 			ToolChoice      *string `json:"tool_choice"`
-			Parallel        bool    `json:"parallel_tool_calls"`
+			Parallel        *bool   `json:"parallel_tool_calls"`
 			Store           bool    `json:"store"`
 			ReasoningEffort *string `json:"reasoning_effort"`
 		}
@@ -84,7 +84,7 @@ func TestProviderTranslatesToolCallsAndStructuredResponses(t *testing.T) {
 			t.Error(err)
 		}
 
-		if in.Model != "test-model" || in.Parallel || in.Store || len(in.Tools) != 1 ||
+		if in.Model != "test-model" || in.Parallel == nil || *in.Parallel || in.Store || len(in.Tools) != 1 ||
 			in.Tools[0].Type != "function" ||
 			in.Tools[0].Function.Name != "list_appointments" ||
 			!in.Tools[0].Function.Strict {

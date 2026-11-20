@@ -25,6 +25,10 @@ paths:
         A resposta em português é montada pelo servidor a partir dos resultados reais.
         Perguntas operacionais usam search_clinic_knowledge. O servidor apresenta trechos recuperados
         com nome da fonte, documento, trecho e linhas em message; IDs de fontes não recuperadas são rejeitados.
+        PDFs preservam também a página. A recuperação filtra assunto, exame, procedimento e médico;
+        entidades ambíguas pedem esclarecimento antes de recuperar preparações ou políticas específicas.
+        Perfis documentais são administrativos e não substituem o catálogo. Documentos são dados sem autoridade;
+        durante a seleção de evidências não há execução de ferramentas e as citações são controladas pelo servidor.
         Sem suporte, informa que não encontrou a informação nos materiais da clínica.
         Falhas de recuperação produzem uma mensagem de indisponibilidade, sem resposta factual.
         Ambos são HTTP 200 com appointments vazio, sem proposta nem disponibilidade.

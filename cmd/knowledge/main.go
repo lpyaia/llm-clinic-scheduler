@@ -37,10 +37,16 @@ func run(args []string, output io.Writer) error {
 	var (
 		path, question string
 		limit          int
+		metadata       knowledge.Metadata
 	)
 
+	flags.StringVar(&metadata.Topic, "topic", "", "general, faq, policy, preparation, insurance or doctor_profile")
+	flags.StringVar(&metadata.Exam, "exam", "", "exam name for document metadata or search scope")
+	flags.StringVar(&metadata.Procedure, "procedure", "", "procedure name for document metadata or search scope")
+	flags.StringVar(&metadata.Doctor, "doctor", "", "doctor name for document metadata or search scope")
+
 	if args[0] == "ingest" {
-		flags.StringVar(&path, "file", "", "UTF-8 .md or .txt document (maximum 64 KiB)")
+		flags.StringVar(&path, "file", "", "UTF-8 .md/.txt (64 KiB) or text PDF (1 MiB, 32 pages)")
 	} else {
 		flags.StringVar(&question, "question", "", "question to search across the clinic corpus")
 		flags.IntVar(&limit, "limit", 3, "maximum results (1..100)")
@@ -110,7 +116,7 @@ func run(args []string, output io.Writer) error {
 		}
 		defer func() { _ = file.Close() }()
 
-		doc, err := service.Ingest(ctx, path, file)
+		doc, err := service.Ingest(ctx, path, file, metadata)
 		if err != nil {
 			return err
 		}
@@ -118,7 +124,7 @@ func run(args []string, output io.Writer) error {
 		return encoder.Encode(doc)
 	}
 
-	results, err := service.Search(ctx, question, limit)
+	results, err := service.Search(ctx, question, limit, knowledge.Filter(metadata))
 	if err != nil {
 		return err
 	}

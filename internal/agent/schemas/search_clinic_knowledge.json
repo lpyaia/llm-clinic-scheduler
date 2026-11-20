@@ -6,9 +6,45 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 1000
+    },
+    "topic": {
+      "type": "string",
+      "enum": [
+        "general",
+        "faq",
+        "policy",
+        "preparation",
+        "insurance",
+        "doctor_profile"
+      ]
+    },
+    "exam": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 200
+    },
+    "procedure": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 200
+    },
+    "doctor": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 200
     }
   },
   "required": [
-    "question"
+    "question",
+    "topic",
+    "exam",
+    "procedure",
+    "doctor"
   ]
 }

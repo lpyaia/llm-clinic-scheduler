@@ -3,7 +3,9 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -29,7 +31,7 @@ func (q *knowledgeSearch) Definition() contract.Tool {
 	return contract.Tool{
 		Name: "search_clinic_knowledge",
 		Description: "Busca informações operacionais nos materiais da clínica. " +
-			"Não consulta médicos, especialidades, horários disponíveis ou agendamentos reais.",
+			"Perfis documentais não substituem o catálogo de médicos ou a disponibilidade real.",
 		Parameters: q.schemas.SearchClinicKnowledge,
 	}
 }
@@ -37,8 +39,9 @@ func (q *knowledgeSearch) Definition() contract.Tool {
 func (q *knowledgeSearch) Execute(ctx context.Context, _ Input, arguments json.RawMessage) (Outcome, error) {
 	var args struct {
 		Question string `json:"question"`
+		knowledge.Filter
 	}
-	if contract.DecodeObject(arguments, &args, "question") != nil {
+	if contract.DecodeObject(arguments, &args, "question", "topic", "exam", "procedure", "doctor") != nil {
 		return nil, contract.InvalidResponse()
 	}
 
@@ -47,13 +50,26 @@ func (q *knowledgeSearch) Execute(ctx context.Context, _ Input, arguments json.R
 		return nil, contract.InvalidResponse()
 	}
 
+	if err := knowledge.Metadata(args.Filter).Validate(); err != nil {
+		return nil, contract.InvalidResponse()
+	}
+
+	if args.Filter == (knowledge.Filter{}) {
+		args.Topic = "general"
+	}
+
 	if q.corpus == nil {
 		return ReplyToPatient{Result: knowledgeReply(knowledgeUnavailable)}, nil
 	}
 
-	rows, err := q.corpus.Search(ctx, question, 3)
+	rows, err := q.corpus.Search(ctx, question, 3, args.Filter)
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
+	}
+
+	var clarification *knowledge.Clarification
+	if errors.As(err, &clarification) {
+		return ReplyToPatient{Result: knowledgeReply(clarifyKnowledge(clarification.Candidates))}, nil
 	}
 
 	if err != nil {
@@ -77,6 +93,7 @@ func (q *knowledgeSearch) Execute(ctx context.Context, _ Input, arguments json.R
 	}
 
 	return ReturnToModel{
+		AnswerOnly:     true,
 		Content:        content,
 		ResponseSchema: contract.ResponseSchema{Name: "knowledge_answer", Schema: q.schemas.KnowledgeAnswer},
 		Instructions: `Após search_clinic_knowledge, retorne somente excerpt_ids com os IDs dos trechos
@@ -88,6 +105,31 @@ A aplicação apresenta o texto integral e as fontes dos trechos escolhidos; nã
 			return finishKnowledge(answer, excerpts)
 		},
 	}, nil
+}
+
+func clarifyKnowledge(candidates []knowledge.Metadata) string {
+	var names []string
+
+	for _, candidate := range candidates {
+		name := strings.Join([]string{candidate.Exam, candidate.Procedure, candidate.Doctor}, " ")
+		name = strings.Join(strings.Fields(name), " ")
+		if name == "" {
+			name = "política geral"
+		}
+
+		if !slices.Contains(names, name) {
+			names = append(names, name)
+		}
+	}
+
+	slices.Sort(names)
+
+	if len(names) > 10 {
+		names = names[:10]
+	}
+
+	return "Qual exame, procedimento ou médico você quer consultar? Especifique o nome. Opções: " +
+		strings.Join(names, "; ") + "."
 }
 
 func finishKnowledge(raw json.RawMessage, excerpts []knowledgeExcerpt) (contract.Result, error) {
@@ -120,8 +162,14 @@ func finishKnowledge(raw json.RawMessage, excerpts []knowledgeExcerpt) (contract
 		}
 
 		seen[id] = true
-		message += fmt.Sprintf("\n\n%s\nFonte: %s (documento %s, trecho %d, linhas %d–%d).",
-			found.Text, found.Source, found.DocumentID, found.Ordinal, found.StartLine, found.EndLine)
+
+		location := fmt.Sprintf("linhas %d–%d", found.StartLine, found.EndLine)
+		if found.Page > 0 {
+			location = fmt.Sprintf("página %d, %s", found.Page, location)
+		}
+
+		message += fmt.Sprintf("\n\n%s\nFonte: %s (documento %s, trecho %d, %s).",
+			found.Text, found.Source, found.DocumentID, found.Ordinal, location)
 	}
 
 	return knowledgeReply(message), nil

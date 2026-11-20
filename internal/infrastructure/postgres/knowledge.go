@@ -29,10 +29,18 @@ func (s *Store) SaveDocument(ctx context.Context, doc knowledge.Document, chunks
 			return knowledge.ErrIncompatible
 		}
 
+		// The source identifies the current document. Cascading deletion also removes its vectors.
+		// Deletion and replacement share the transaction, so readers see a complete version.
+		if err := tx.Exec("DELETE FROM clinic_documents WHERE source = ?", doc.Source).Error; err != nil {
+			return err
+		}
+
 		if err := tx.Exec(`
-			INSERT INTO clinic_documents (id, source, content, provider, model, dimensions, chunk_count)
-			VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			INSERT INTO clinic_documents
+			(id, source, content, provider, model, dimensions, chunk_count, topic, exam, procedure, doctor)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			doc.ID, doc.Source, doc.Content, cfg.Provider, cfg.Model, cfg.Dimensions, doc.ChunkCount,
+			doc.Metadata.Topic, doc.Metadata.Exam, doc.Metadata.Procedure, doc.Metadata.Doctor,
 		).Error; err != nil {
 			return err
 		}
@@ -44,10 +52,10 @@ func (s *Store) SaveDocument(ctx context.Context, doc knowledge.Document, chunks
 
 			if err := tx.Exec(`
 				INSERT INTO clinic_document_chunks
-				(document_id, ordinal, content, start_line, end_line, dimensions, embedding)
-				VALUES (?, ?, ?, ?, ?, ?, ?::public.vector)`,
+				(document_id, ordinal, content, start_line, end_line, dimensions, embedding, page)
+				VALUES (?, ?, ?, ?, ?, ?, ?::public.vector, ?)`,
 				doc.ID, chunk.Ordinal, chunk.Text, chunk.StartLine, chunk.EndLine,
-				cfg.Dimensions, vectorLiteral(chunk.Vector),
+				cfg.Dimensions, vectorLiteral(chunk.Vector), chunk.Page,
 			).Error; err != nil {
 				return err
 			}
@@ -59,6 +67,16 @@ func (s *Store) SaveDocument(ctx context.Context, doc knowledge.Document, chunks
 
 func (s *Store) CorpusConfig(ctx context.Context) (*knowledge.EmbeddingConfig, error) {
 	return corpusConfig(s.db.WithContext(ctx))
+}
+
+func (s *Store) Scopes(ctx context.Context) ([]knowledge.Metadata, error) {
+	var scopes []knowledge.Metadata
+
+	err := s.db.WithContext(ctx).Table("clinic_documents").
+		Distinct("topic", "exam", "procedure", "doctor").
+		Order("topic, exam, procedure, doctor").Find(&scopes).Error
+
+	return scopes, err
 }
 
 func corpusConfig(db *gorm.DB) (*knowledge.EmbeddingConfig, error) {
@@ -81,7 +99,7 @@ func corpusConfig(db *gorm.DB) (*knowledge.EmbeddingConfig, error) {
 }
 
 func (s *Store) SearchCorpus(
-	ctx context.Context, cfg knowledge.EmbeddingConfig, vector []float32, limit int,
+	ctx context.Context, cfg knowledge.EmbeddingConfig, vector []float32, limit int, filter knowledge.ResolvedFilter,
 ) ([]knowledge.Result, error) {
 	if err := cfg.ValidateVector(vector); err != nil {
 		return nil, err
@@ -91,9 +109,13 @@ func (s *Store) SearchCorpus(
 
 	err := s.db.WithContext(ctx).Raw(`
 		SELECT c.document_id, d.source, c.ordinal, c.content AS text, c.start_line, c.end_line,
+		       d.topic, d.exam, d.procedure, d.doctor, c.page,
 		       1 - (c.embedding OPERATOR(public.<=>) ?::public.vector) AS similarity
 		FROM clinic_document_chunks c JOIN clinic_documents d ON d.id = c.document_id
 		WHERE d.provider = ? AND d.model = ? AND d.dimensions = ?
+		  AND (? = '' OR d.topic = ?) AND (? = '' OR d.exam = ?)
+		  AND (? = '' OR d.procedure = ?) AND (? = '' OR d.doctor = ?)
+		  AND (? OR (d.exam = '' AND d.procedure = '' AND d.doctor = ''))
 		  AND NOT EXISTS (
 		      SELECT 1 FROM clinic_documents incompatible
 		      WHERE incompatible.provider <> ? OR incompatible.model <> ? OR incompatible.dimensions <> ?
@@ -101,6 +123,9 @@ func (s *Store) SearchCorpus(
 		ORDER BY c.embedding OPERATOR(public.<=>) ?::public.vector, c.document_id, c.ordinal
 		LIMIT ?`,
 		vectorLiteral(vector), cfg.Provider, cfg.Model, cfg.Dimensions,
+		filter.Topic, filter.Topic, filter.Exam, filter.Exam,
+		filter.Procedure, filter.Procedure, filter.Doctor, filter.Doctor,
+		!filter.GeneralOnly,
 		cfg.Provider, cfg.Model, cfg.Dimensions, vectorLiteral(vector), limit,
 	).Scan(&results).Error
 	if err != nil {
