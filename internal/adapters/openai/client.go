@@ -100,7 +100,7 @@ func (c *Client) Complete(ctx context.Context, in agent.Request) (agent.Response
 		} `json:"tools"`
 		ResponseFormat      *responseFormat `json:"response_format,omitempty"`
 		ToolChoice          string          `json:"tool_choice,omitempty"`
-		ParallelToolCalls   bool            `json:"parallel_tool_calls"`
+		ParallelToolCalls   *bool           `json:"parallel_tool_calls,omitempty"`
 		Store               bool            `json:"store"`
 		MaxCompletionTokens int             `json:"max_completion_tokens"`
 		ReasoningEffort     string          `json:"reasoning_effort,omitempty"`
@@ -110,8 +110,12 @@ func (c *Client) Complete(ctx context.Context, in agent.Request) (agent.Response
 	settings := c.Configuration()
 	request.MaxCompletionTokens = settings.MaxCompletionTokens
 	request.ReasoningEffort = settings.ReasoningEffort
-	request.ParallelToolCalls = settings.ParallelToolCalls
 	request.Store = settings.Store
+
+	// The provider rejects parallel_tool_calls without tools, even when the value is false.
+	if len(in.Tools) > 0 {
+		request.ParallelToolCalls = &settings.ParallelToolCalls
+	}
 
 	if in.RequireTool {
 		request.ToolChoice = "required"
