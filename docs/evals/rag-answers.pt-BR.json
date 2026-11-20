@@ -1,0 +1,145 @@
+{
+  "version": 1,
+  "corpus": [
+    {
+      "document_id": "aa000000-0000-0000-0000-000000000001",
+      "source": "faq.md",
+      "chunk": 1,
+      "text": "Há estacionamento gratuito na entrada da clínica.",
+      "start_line": 2,
+      "end_line": 2,
+      "similarity": 0,
+      "metadata": {}
+    },
+    {
+      "document_id": "aa000000-0000-0000-0000-000000000001",
+      "source": "faq.md",
+      "chunk": 2,
+      "text": "A entrada da clínica tem uma rampa de acesso.",
+      "start_line": 4,
+      "end_line": 4,
+      "similarity": 0,
+      "metadata": {}
+    },
+    {
+      "document_id": "bb000000-0000-0000-0000-000000000001",
+      "source": "visita.pdf",
+      "chunk": 1,
+      "text": "Traga um documento com foto para a recepção.",
+      "start_line": 1,
+      "end_line": 1,
+      "similarity": 0,
+      "metadata": {},
+      "page": 2
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "parking-correct",
+      "question": "Posso estacionar na clínica?",
+      "reference_answer": "Sim, há estacionamento gratuito na entrada.",
+      "expected_evidence": [
+        "aa000000-0000-0000-0000-000000000001:1"
+      ],
+      "abstention_expected": false
+    },
+    {
+      "id": "visit-two-sources",
+      "question": "Posso estacionar e o que devo levar à recepção?",
+      "reference_answer": "Há estacionamento gratuito. Leve um documento com foto.",
+      "expected_evidence": [
+        "aa000000-0000-0000-0000-000000000001:1",
+        "bb000000-0000-0000-0000-000000000001:1"
+      ],
+      "abstention_expected": false
+    },
+    {
+      "id": "pool-correct-abstention",
+      "question": "A clínica tem piscina?",
+      "reference_answer": "Os materiais não informam se há piscina; abster-se é correto.",
+      "expected_evidence": [],
+      "abstention_expected": true
+    },
+    {
+      "id": "plausible-unsupported",
+      "question": "Qual é o preço exato do estacionamento?",
+      "reference_answer": "O estacionamento é gratuito.",
+      "expected_evidence": [
+        "aa000000-0000-0000-0000-000000000001:1"
+      ],
+      "abstention_expected": false
+    },
+    {
+      "id": "invented-citation",
+      "question": "Posso estacionar na clínica?",
+      "reference_answer": "Sim, há estacionamento gratuito na entrada.",
+      "expected_evidence": [
+        "aa000000-0000-0000-0000-000000000001:1"
+      ],
+      "abstention_expected": false
+    },
+    {
+      "id": "source-not-retrieved",
+      "question": "A entrada tem rampa?",
+      "reference_answer": "A entrada tem uma rampa, mas o trecho não foi recuperado nesta execução.",
+      "expected_evidence": [
+        "aa000000-0000-0000-0000-000000000001:2"
+      ],
+      "abstention_expected": false
+    },
+    {
+      "id": "wrong-citation",
+      "question": "Posso estacionar na clínica?",
+      "reference_answer": "Sim, há estacionamento gratuito na entrada.",
+      "expected_evidence": [
+        "aa000000-0000-0000-0000-000000000001:1"
+      ],
+      "abstention_expected": false
+    },
+    {
+      "id": "wrong-location",
+      "question": "O que devo levar à recepção?",
+      "reference_answer": "Um documento com foto; a fonte fica na página 2.",
+      "expected_evidence": [
+        "bb000000-0000-0000-0000-000000000001:1"
+      ],
+      "abstention_expected": false
+    },
+    {
+      "id": "irrelevant-grounded-answer",
+      "question": "Posso estacionar na clínica?",
+      "reference_answer": "Sim, há estacionamento gratuito; falar apenas da rampa não responde.",
+      "expected_evidence": [
+        "aa000000-0000-0000-0000-000000000001:1"
+      ],
+      "abstention_expected": false
+    },
+    {
+      "id": "undue-abstention",
+      "question": "Posso estacionar na clínica?",
+      "reference_answer": "Sim, o trecho recuperado informa estacionamento gratuito.",
+      "expected_evidence": [
+        "aa000000-0000-0000-0000-000000000001:1"
+      ],
+      "abstention_expected": false
+    },
+    {
+      "id": "missing-citation",
+      "question": "Posso estacionar na clínica?",
+      "reference_answer": "Sim, há estacionamento gratuito na entrada.",
+      "expected_evidence": [
+        "aa000000-0000-0000-0000-000000000001:1"
+      ],
+      "abstention_expected": false
+    },
+    {
+      "id": "retrieval-unavailable",
+      "question": "Posso estacionar na clínica?",
+      "reference_answer": "A indisponibilidade da busca é erro operacional, não abstention correta.",
+      "expected_evidence": [
+        "aa000000-0000-0000-0000-000000000001:1"
+      ],
+      "abstention_expected": false
+    }
+  ]
+}

@@ -260,8 +260,9 @@ fontes apenas do histórico e campos adicionais na resposta são rejeitados com 
 
 Esta entrega usa respostas extrativas para preservar as condições e ressalvas do material. A seleção semântica de um
 trecho relevante ainda depende do modelo; os testes simulados não demonstram sua qualidade com o fornecedor real.
-Importe materiais administrativos em português e confira as respostas com as fontes. Avaliações de relevância,
-groundedness e citações com modelo real pertencem à fase seguinte.
+Importe materiais administrativos em português e confira as respostas com as fontes. A
+[avaliação de respostas RAG](../evals/rag-answers.md) verifica respostas extrativas gravadas, groundedness,
+citações e abstention com rótulos manuais. Os fixtures não demonstram a qualidade de um modelo real.
 
 Acervo vazio ou ausência de suporte produz: “Não encontrei essa informação nos materiais da clínica.”
 Falha de banco, embeddings, incompatibilidade do acervo ou serviço não configurado produz:

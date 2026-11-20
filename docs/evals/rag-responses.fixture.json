@@ -1,0 +1,118 @@
+{
+  "dataset_sha256": "568c6489e5750cc72b61b40c781566cdf415c8de086ee0a183a247a923b5775e",
+  "provider": "fixture",
+  "model": "manual-extractive-v1",
+  "responses": {
+    "parking-correct": {
+      "retrieved": [
+        "aa000000-0000-0000-0000-000000000001:1"
+      ],
+      "message_lines": [
+        "Encontrei nos materiais da clínica:",
+        "",
+        "Há estacionamento gratuito na entrada da clínica.",
+        "Fonte: faq.md (documento aa000000-0000-0000-0000-000000000001, trecho 1, linhas 2–2)."
+      ]
+    },
+    "visit-two-sources": {
+      "retrieved": [
+        "aa000000-0000-0000-0000-000000000001:1",
+        "bb000000-0000-0000-0000-000000000001:1"
+      ],
+      "message_lines": [
+        "Encontrei nos materiais da clínica:",
+        "",
+        "Há estacionamento gratuito na entrada da clínica.",
+        "Fonte: faq.md (documento aa000000-0000-0000-0000-000000000001, trecho 1, linhas 2–2).",
+        "",
+        "Traga um documento com foto para a recepção.",
+        "Fonte: visita.pdf (documento bb000000-0000-0000-0000-000000000001, trecho 1, página 2, linhas 1–1)."
+      ]
+    },
+    "pool-correct-abstention": {
+      "retrieved": [
+        "aa000000-0000-0000-0000-000000000001:1"
+      ],
+      "message_lines": [
+        "Não encontrei essa informação nos materiais da clínica."
+      ]
+    },
+    "plausible-unsupported": {
+      "retrieved": [
+        "aa000000-0000-0000-0000-000000000001:1"
+      ],
+      "message_lines": [
+        "O estacionamento custa R$ 20 por hora."
+      ]
+    },
+    "invented-citation": {
+      "retrieved": [
+        "aa000000-0000-0000-0000-000000000001:1"
+      ],
+      "message_lines": [
+        "Há estacionamento gratuito na entrada da clínica.",
+        "Fonte: faq.md (documento aa000000-0000-0000-0000-000000000001, trecho 99, linhas 2–2)."
+      ]
+    },
+    "source-not-retrieved": {
+      "retrieved": [
+        "aa000000-0000-0000-0000-000000000001:1"
+      ],
+      "message_lines": [
+        "A entrada da clínica tem uma rampa de acesso.",
+        "Fonte: faq.md (documento aa000000-0000-0000-0000-000000000001, trecho 2, linhas 4–4)."
+      ]
+    },
+    "wrong-citation": {
+      "retrieved": [
+        "aa000000-0000-0000-0000-000000000001:1",
+        "aa000000-0000-0000-0000-000000000001:2"
+      ],
+      "message_lines": [
+        "Há estacionamento gratuito na entrada da clínica.",
+        "Fonte: faq.md (documento aa000000-0000-0000-0000-000000000001, trecho 2, linhas 4–4)."
+      ]
+    },
+    "wrong-location": {
+      "retrieved": [
+        "bb000000-0000-0000-0000-000000000001:1"
+      ],
+      "message_lines": [
+        "Traga um documento com foto para a recepção.",
+        "Fonte: visita.pdf (documento bb000000-0000-0000-0000-000000000001, trecho 1, página 3, linhas 1–1)."
+      ]
+    },
+    "irrelevant-grounded-answer": {
+      "retrieved": [
+        "aa000000-0000-0000-0000-000000000001:1",
+        "aa000000-0000-0000-0000-000000000001:2"
+      ],
+      "message_lines": [
+        "A entrada da clínica tem uma rampa de acesso.",
+        "Fonte: faq.md (documento aa000000-0000-0000-0000-000000000001, trecho 2, linhas 4–4)."
+      ]
+    },
+    "undue-abstention": {
+      "retrieved": [
+        "aa000000-0000-0000-0000-000000000001:1"
+      ],
+      "message_lines": [
+        "Não encontrei essa informação nos materiais da clínica."
+      ]
+    },
+    "missing-citation": {
+      "retrieved": [
+        "aa000000-0000-0000-0000-000000000001:1"
+      ],
+      "message_lines": [
+        "Há estacionamento gratuito na entrada da clínica."
+      ]
+    },
+    "retrieval-unavailable": {
+      "retrieved": [],
+      "message_lines": [
+        "Não consegui consultar os materiais da clínica agora. Tente novamente mais tarde."
+      ]
+    }
+  }
+}
