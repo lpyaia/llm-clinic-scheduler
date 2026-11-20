@@ -3,6 +3,9 @@
 Para avaliar a busca documental com recall@k, acervo controlado e relevância por posição, veja
 [Avaliação de recuperação](retrieval.md). O executor de recuperação é separado do modelo conversacional.
 
+Para groundedness, correção de respostas, citações e abstention em respostas extrativas gravadas, veja
+[Avaliação de respostas RAG](rag-answers.md), com exemplos positivos e negativos determinísticos.
+
 ## Executor reproduzível (#18)
 
 Execute na raiz do repositório, sem PostgreSQL, servidor ou credenciais:
