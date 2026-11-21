@@ -79,5 +79,12 @@
       "description": "Enter command-line arguments",
       "default": ""
     }
-  ]
+  ],
+  "dlvLoadConfig": {
+    "followPointers": true,
+    "maxVariableRecurse": 10,
+    "maxStringLen": 65535,
+    "maxArrayValues": 65535,
+    "maxStructFields": -1
+  }
 }
