@@ -95,7 +95,7 @@ func (s *Store) Acquire(
 		if err == nil && exists {
 			err = domain.ErrNotFound
 		}
-	} else if errors.Is(err, sql.ErrNoRows) || (err == nil && access.CreateConversation) {
+	} else if errors.Is(err, sql.ErrNoRows) {
 		err = domain.ErrNotFound
 	} else if err == nil {
 		var stored storedConversation

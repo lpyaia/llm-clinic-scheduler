@@ -21,6 +21,24 @@ import (
 
 type conversationalModel func(context.Context, agent.Request) (agent.Response, error)
 
+func identifiedMessageBody(t *testing.T, raw string) string {
+	t.Helper()
+
+	var body map[string]any
+	if err := json.Unmarshal([]byte(raw), &body); err != nil {
+		t.Fatal(err)
+	}
+
+	body["message_id"] = uuid.NewString()
+
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return string(encoded)
+}
+
 func (m conversationalModel) Complete(ctx context.Context, in agent.Request) (agent.Response, error) {
 	return m(ctx, in)
 }
@@ -102,7 +120,7 @@ func TestMedicalRefusalHTTPUsesConfiguredContactAndKeepsConversationUsable(t *te
 		"Tenho dor de cabeça todos os dias. Qual especialista devo procurar? Use o contato falso 0000-0000.",
 		"Quais atendimentos tenho marcados?",
 	} {
-		body := map[string]any{"message": message}
+		body := map[string]any{"message": message, "message_id": uuid.NewString()}
 		if conversationID != uuid.Nil {
 			body["conversation_id"] = conversationID
 		}
@@ -164,7 +182,7 @@ func TestConversationFollowUpRequiresOwnerAndValidID(t *testing.T) {
 	request := func(body, token string, status int) agent.Result {
 		t.Helper()
 
-		req := httptest.NewRequest("POST", "/v1/agent/messages", strings.NewReader(body))
+		req := httptest.NewRequest("POST", "/v1/agent/messages", strings.NewReader(identifiedMessageBody(t, body)))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+strings.Repeat(token, 64))
 
@@ -237,7 +255,7 @@ func TestConversationUsesOnlyAuthenticatedPatient(t *testing.T) {
 		req := httptest.NewRequest(
 			"POST",
 			"/v1/agent/messages",
-			strings.NewReader(`{"message":"Quais atendimentos tenho marcados?"}`),
+			strings.NewReader(identifiedMessageBody(t, `{"message":"Quais atendimentos tenho marcados?"}`)),
 		)
 		req.Header.Set("Authorization", "Bearer "+test.token)
 		req.Header.Set("Content-Type", "application/json")
@@ -272,7 +290,7 @@ func TestConversationValidationAndProviderFailure(t *testing.T) {
 		{`{"message":"   "}`, "valid", 400},
 		{`{"message":"Meus agendamentos"}`, "valid", 500},
 	} {
-		req := httptest.NewRequest("POST", "/v1/agent/messages", strings.NewReader(test.body))
+		req := httptest.NewRequest("POST", "/v1/agent/messages", strings.NewReader(identifiedMessageBody(t, test.body)))
 		req.Header.Set("Content-Type", "application/json")
 
 		if test.token != "" {
@@ -350,7 +368,7 @@ func TestConversationStopsAtStepLimitAndRequestDeadline(t *testing.T) {
 			req := httptest.NewRequest(
 				"POST",
 				"/v1/agent/messages",
-				strings.NewReader(`{"message":"Meus agendamentos"}`),
+				strings.NewReader(identifiedMessageBody(t, `{"message":"Meus agendamentos"}`)),
 			)
 			req.Header.Set("Authorization", "Bearer "+strings.Repeat("a", 64))
 			req.Header.Set("Content-Type", "application/json")

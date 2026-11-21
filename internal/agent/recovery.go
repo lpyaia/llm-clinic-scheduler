@@ -12,6 +12,7 @@ import (
 // for errors.Is/errors.As. ConversationID identifies the saved recovery context.
 type TurnError struct {
 	ConversationID uuid.UUID
+	MessageID      uuid.UUID
 	failure        *domain.Error
 	cause          error
 }
@@ -19,7 +20,7 @@ type TurnError struct {
 func (e *TurnError) Error() string   { return e.failure.Error() }
 func (e *TurnError) Unwrap() []error { return []error{e.failure, e.cause} }
 
-func turnFailure(id uuid.UUID, err error) error {
+func turnFailure(id uuid.UUID, err error) *TurnError {
 	code := domain.ErrorCode(err)
 	message := "Não foi possível concluir a operação. Consulte seus agendamentos antes de tentar novamente. " +
 		"Uma nova operação exige outro resumo e confirmação."
@@ -40,7 +41,8 @@ func turnFailure(id uuid.UUID, err error) error {
 	case "MODEL_INVALID_RESPONSE", "AGENT_STEP_LIMIT":
 		message = "Não consegui interpretar seu pedido com segurança. Envie o pedido novamente. " +
 			"Uma proposta anterior exige nova preparação, resumo e confirmação."
-	case "NOT_FOUND", "UNAUTHORIZED", "INVALID_INPUT", "APPOINTMENT_NOT_MUTABLE", "ACTION_NOT_COMPLETED":
+	case "NOT_FOUND", "UNAUTHORIZED", "INVALID_INPUT", "APPOINTMENT_NOT_MUTABLE", "ACTION_NOT_COMPLETED",
+		"MESSAGE_INTERRUPTED":
 		var failure *domain.Error
 		if errors.As(err, &failure) {
 			message = failure.Message
@@ -59,7 +61,19 @@ func turnFailure(id uuid.UUID, err error) error {
 // discard obsolete choices. Unknown confirmation outcomes keep their lookup reference.
 func failTurn(ctx context.Context, locked LockedConversation, id uuid.UUID, err error) error {
 	state := locked.Snapshot()
-	if state.discardFailedProposal(domain.ErrorCode(err)) {
+	changed := state.discardFailedProposal(domain.ErrorCode(err))
+	if state.Uncertain == nil {
+		for i := range state.Messages {
+			record := &state.Messages[i]
+			if record.Status == MessageProcessing {
+				record.Status = MessageFailed
+				record.Failure = turnFailure(id, err).failure
+				changed = true
+			}
+		}
+	}
+
+	if changed {
 		if saveErr := locked.Save(ctx, state); saveErr != nil {
 			err = errors.Join(err, saveErr)
 		}

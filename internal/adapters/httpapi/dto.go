@@ -127,4 +127,5 @@ type errorDetail struct {
 	Message        string `json:"message"`
 	RequestID      string `json:"request_id"`
 	ConversationID string `json:"conversation_id,omitempty"`
+	MessageID      string `json:"message_id,omitempty"`
 }

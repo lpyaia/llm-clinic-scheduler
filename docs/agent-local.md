@@ -1,4 +1,4 @@
-# Fluxos conversacionais de agendamento — tickets #7, #10, #11, #12, #13 e #26
+# Fluxos conversacionais de agendamento — tickets #7, #10, #11, #12, #13, #26 e #27
 
 O paciente autenticado consulta seus agendamentos em português por
 `POST /v1/agent/messages`. A ferramenta `list_appointments` reutiliza
@@ -37,7 +37,8 @@ O servidor usa `EMBEDDING_MODEL` e `EMBEDDING_DIMENSIONS` compatíveis com o ace
    $body = @{ full_name = 'Maria Souza'; phone = '+5511999999999' } | ConvertTo-Json
    $session = Invoke-RestMethod "$base/v1/dev/sessions" -Method Post -ContentType 'application/json' -Body $body
    $headers = @{ Authorization = "Bearer $($session.token)" }
-   $question = @{ message = 'Quais atendimentos tenho marcados?' } | ConvertTo-Json
+   $question = @{ message_id = [guid]::NewGuid().ToString(); message = 'Quais atendimentos tenho marcados?' }
+   $question = $question | ConvertTo-Json
    Invoke-RestMethod "$base/v1/agent/messages" -Method Post -Headers $headers `
      -ContentType 'application/json; charset=utf-8' `
      -Body ([System.Text.Encoding]::UTF8.GetBytes($question))
@@ -58,15 +59,22 @@ O servidor usa `EMBEDDING_MODEL` e `EMBEDDING_DIMENSIONS` compatíveis com o ace
    Guarde o `conversation_id` retornado e inclua-o nas próximas mensagens:
 
    ```powershell
-   $question = @{ message = 'Quero cardiologia semana que vem à tarde' } | ConvertTo-Json
+   $question = @{ message_id = [guid]::NewGuid().ToString(); message = 'Quero cardiologia semana que vem à tarde' }
+   $question = $question | ConvertTo-Json
    $reply = Invoke-RestMethod "$base/v1/agent/messages" -Method Post -Headers $headers `
      -ContentType 'application/json; charset=utf-8' `
      -Body ([System.Text.Encoding]::UTF8.GetBytes($question))
-   $question = @{ conversation_id = $reply.conversation_id; message = 'Depois de terça' } | ConvertTo-Json
+   $question = @{
+     message_id = [guid]::NewGuid().ToString(); conversation_id = $reply.conversation_id
+     conversation_revision = $reply.conversation_revision; message = 'Depois de terça'
+   } | ConvertTo-Json
    $reply = Invoke-RestMethod "$base/v1/agent/messages" -Method Post -Headers $headers `
      -ContentType 'application/json; charset=utf-8' `
      -Body ([System.Text.Encoding]::UTF8.GetBytes($question))
-   $question = @{ conversation_id = $reply.conversation_id; message = 'Prefiro de manhã' } | ConvertTo-Json
+   $question = @{
+     message_id = [guid]::NewGuid().ToString(); conversation_id = $reply.conversation_id
+     conversation_revision = $reply.conversation_revision; message = 'Prefiro de manhã'
+   } | ConvertTo-Json
    Invoke-RestMethod "$base/v1/agent/messages" -Method Post -Headers $headers `
      -ContentType 'application/json; charset=utf-8' `
      -Body ([System.Text.Encoding]::UTF8.GetBytes($question))
@@ -203,10 +211,27 @@ resposta. O núcleo revalida ownership, validade, disponibilidade e limite seman
 na confirmação. Sem proposta, o modelo deve pedir uma escolha; “não” não descarta
 uma proposta inexistente. Conversas alheias retornam `NOT_FOUND` (404).
 
-Toda mensagem concorrente agora retorna `INVALID_INPUT` (400) imediatamente,
-antes da interpretação. Aguarde a resposta, leia o resumo e reenvie a mensagem.
-Antes, apenas confirmações reconhecidas pela lista tinham essa proteção; demais
-mensagens esperavam. Conversas diferentes continuam independentes.
+Cada mensagem HTTP exige `message_id` gerado pelo cliente. Reenvie o mesmo JSON após perder a resposta;
+uma nova mensagem exige outro UUID. O resultado inclui esse ID e `conversation_revision`.
+Após ler o resumo, envie sua revisão na mensagem posterior: uma revisão antiga não pode confirmar uma proposta nova.
+As tools do modelo continuam sem receber esses identificadores de transporte ou escolher a ação a confirmar.
+
+Mensagens identificadas concorrentes aguardam o lock PostgreSQL, respeitando o deadline HTTP.
+A ordem de aquisição define a ordem de processamento; não se promete FIFO de chegada HTTP.
+Cancelar enquanto espera não aceita a mensagem; é possível repetir seu ID depois.
+Conversas diferentes continuam independentes, dentro da capacidade dos pools de conexão.
+Veja a [decisão de concorrência, deduplicação e recuperação](adr/0002-identified-conversation-messages.md).
+
+O primeiro checkpoint salva texto, ID e status `processing` no estado JSONB existente.
+O resultado final e status `completed` ou `failed` são gravados junto com o contexto, sem outra migration.
+Replay devolve o resultado original sem chamar modelo ou ferramentas, mesmo após reiniciar ou atualizar o contexto.
+Outro texto com o mesmo ID retorna `INVALID_INPUT` (400).
+A primeira mensagem sem `conversation_id` também é deduplicada.
+Um turno interrompido sem confirmação incerta retorna `MESSAGE_INTERRUPTED` (409); envie novo pedido com outro ID.
+Com ação incerta, o resultado é consultado antes de processar a próxima mensagem, sem repetir a mutação.
+O registro mantém também o texto de mensagens aceitas que falharam; o histórico do modelo contém trocas bem-sucedidas.
+Os métodos diretos `Reply` e `ReplyConversation` conservam o modo anterior para consumidores e avaliações existentes;
+adapters de canal usam `ReplyMessage`.
 
 A autoridade anterior é revogada e gravada antes da interpretação. Rejeição,
 alteração, ambiguidade, desvio de intenção, falha do modelo, resposta inválida ou

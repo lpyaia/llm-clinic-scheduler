@@ -18,6 +18,10 @@ A aplicação escolhe paciente e ação e o núcleo revalida ownership, validade
 
 ## Concorrência e falhas
 
+A política de rejeição imediata abaixo permanece nos métodos diretos de compatibilidade.
+Para HTTP e `ReplyMessage`, a #27 a substitui por espera serializada e identificação estável:
+[Mensagens identificadas e revisão da proposta](0002-identified-conversation-messages.md).
+
 Toda mensagem usa acesso exclusivo imediato, antes de chamar o modelo, sem reconhecimento textual de confirmação.
 Uma conversa ocupada retorna `INVALID_INPUT` (400); conversas distintas continuam independentes.
 Antes, apenas confirmações reconhecidas por lista eram rejeitadas e as demais mensagens esperavam na fila.

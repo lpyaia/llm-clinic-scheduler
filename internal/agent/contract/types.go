@@ -63,6 +63,8 @@ type TokenUsage struct {
 
 type Result struct {
 	ConversationID uuid.UUID      `json:"conversation_id"`
+	MessageID      uuid.UUID      `json:"message_id,omitempty"`
+	Revision       uint64         `json:"conversation_revision"`
 	Message        string         `json:"message"`
 	Appointments   []Appointment  `json:"appointments"`
 	Availability   *Availability  `json:"availability,omitempty"`
