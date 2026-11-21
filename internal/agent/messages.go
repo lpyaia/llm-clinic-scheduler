@@ -83,6 +83,18 @@ func (c *Conversation) completeMessage(id uuid.UUID, out Result) {
 	}
 }
 
+func (f *conversationFlow) completeExchange(id, messageID uuid.UUID, text string, out Result) Result {
+	out.ConversationID, out.Revision = id, f.state.Revision
+	if messageID != uuid.Nil {
+		out.MessageID = messageID
+		f.state.completeMessage(messageID, out)
+	}
+
+	f.rememberExchange(text, out.Message)
+
+	return out
+}
+
 // recoverMessages runs only after acquiring exclusive access. Any processing
 // record now belongs to an interrupted owner. It never repeats interpretation or
 // confirmation: uncertain mutations are queried through their saved action ID.
@@ -105,9 +117,7 @@ func (f *conversationFlow) recoverMessages(ctx context.Context, locked LockedCon
 			}
 
 			if err == nil {
-				out.ConversationID, out.MessageID, out.Revision = id, record.ID, f.state.Revision
-				f.state.completeMessage(record.ID, out)
-				f.rememberExchange(record.Text, out.Message)
+				f.completeExchange(id, record.ID, record.Text, out)
 			}
 		}
 

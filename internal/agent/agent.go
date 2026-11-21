@@ -152,6 +152,11 @@ func (a *Agent) replyConversation(
 ) (result Result, resultErr error) {
 	run := a.Traces.Start(ctx, message)
 
+	messageID := uuid.Nil
+	if input != nil {
+		messageID = input.ID
+	}
+
 	defer func() {
 		if value := recover(); value != nil {
 			run.Finish(nil, errors.New("agent execution interrupted"))
@@ -266,13 +271,7 @@ func (a *Agent) replyConversation(
 		recoveryStep.End(out, err)
 
 		if err == nil {
-			out.ConversationID, out.Revision = id, flow.state.Revision
-			if input != nil {
-				out.MessageID = input.ID
-				flow.state.completeMessage(input.ID, out)
-			}
-
-			flow.rememberExchange(message, out.Message)
+			out = flow.completeExchange(id, messageID, message, out)
 		}
 
 		if flow.state.Uncertain == nil {
@@ -284,8 +283,6 @@ func (a *Agent) replyConversation(
 		if err != nil {
 			return Result{}, turnFailure(id, err)
 		}
-
-		out.ConversationID = id
 
 		return out, nil
 	}
@@ -311,14 +308,7 @@ func (a *Agent) replyConversation(
 		return Result{}, failTurn(ctx, locked, id, err)
 	}
 
-	out.ConversationID = id
-	out.Revision = flow.state.Revision
-	if input != nil {
-		out.MessageID = input.ID
-		flow.state.completeMessage(input.ID, out)
-	}
-
-	flow.rememberExchange(message, out.Message)
+	out = flow.completeExchange(id, messageID, message, out)
 
 	if err := locked.Save(ctx, flow.state); err != nil {
 		return Result{}, turnFailure(id, err)
