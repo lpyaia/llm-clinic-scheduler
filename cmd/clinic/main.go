@@ -99,7 +99,7 @@ func run(logger *slog.Logger) error {
 
 	if key := os.Getenv("OPENAI_API_KEY"); key != "" {
 		model := &openai.Client{APIKey: key, Model: env("OPENAI_MODEL", "gpt-4.1-mini")}
-		assistant = agent.New(service, model)
+		assistant = agent.NewWithConversations(service, model, store)
 		assistant.ClinicContact = os.Getenv("CLINIC_CONTACT")
 
 		dimensions, err := strconv.Atoi(env("EMBEDDING_DIMENSIONS", "1536"))

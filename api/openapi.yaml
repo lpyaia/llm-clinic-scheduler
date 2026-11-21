@@ -18,8 +18,9 @@ paths:
       description: >-
         Resolve o paciente pela sessão. Sem conversation_id, inicia uma conversa;
         repita o ID retornado para preservar histórico e preferências de busca.
-        Conversas pertencem ao paciente autenticado, vivem em memória e são perdidas
-        ao reiniciar. IDs desconhecidos ou de outro paciente retornam 404.
+        Conversas pertencem ao paciente autenticado e persistem no PostgreSQL após migrations explícitas.
+        Histórico, preferências, seleção e referência à proposta sobrevivem ao reinício.
+        IDs desconhecidos ou de outro paciente retornam 404, inclusive durante outro turno.
         O modelo chama list_appointments, find_available_slots ou create_appointment; nomes são
         resolvidos pelo catálogo e datas relativas usam o relógio e fuso da clínica.
         A resposta em português é montada pelo servidor a partir dos resultados reais.
@@ -58,6 +59,7 @@ paths:
         e error.conversation_id quando o turno já possui estado salvo. Reutilize esse ID para retomar.
         Antes de confirmar, o fluxo salva uma referência de consulta. Se houver resultado incerto,
         a próxima mensagem consulta a ação antes de interpretar outro pedido, sem repetir a mutação.
+        Falha ao salvar estado não retorna resposta de sucesso; checkpoints anteriores permanecem gravados.
         Sucesso recuperado apresenta o resultado real; ação ainda pendente retorna ACTION_NOT_COMPLETED
         e exige nova preparação, resumo e confirmação. Falha de consulta mantém a referência para nova consulta.
         Limite de quatro chamadas ao modelo. Requer OPENAI_API_KEY no servidor.

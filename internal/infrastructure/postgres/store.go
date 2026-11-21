@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -22,7 +23,10 @@ import (
 //go:embed migrations/*.sql
 var migrations embed.FS
 
-type Store struct{ db *gorm.DB }
+type Store struct {
+	db             *gorm.DB
+	conversationDB *sql.DB
+}
 
 var _ application.Repository = (*Store)(nil)
 
@@ -41,7 +45,20 @@ func Open(dsn string) (*Store, error) {
 	pool.SetMaxIdleConns(4)
 	pool.SetConnMaxLifetime(30 * time.Minute)
 
-	return &Store{db: db}, nil
+	// Turn locks pin sessions while the core uses its own pool for short transactions.
+	// Sharing the pool could exhaust it with turns waiting for core connections.
+	conversationDB, err := sql.Open("pgx", dsn)
+	if err != nil {
+		_ = pool.Close()
+
+		return nil, err
+	}
+
+	conversationDB.SetMaxOpenConns(12)
+	conversationDB.SetMaxIdleConns(4)
+	conversationDB.SetConnMaxLifetime(30 * time.Minute)
+
+	return &Store{db: db, conversationDB: conversationDB}, nil
 }
 
 func (s *Store) Close() error {
@@ -50,7 +67,7 @@ func (s *Store) Close() error {
 		return err
 	}
 
-	return pool.Close()
+	return errors.Join(pool.Close(), s.conversationDB.Close())
 }
 
 func (s *Store) Ping(ctx context.Context) error {

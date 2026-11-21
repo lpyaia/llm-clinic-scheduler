@@ -36,15 +36,18 @@ func TestConversationalReschedulingPostgres(t *testing.T) {
 
 			out, err := a.Reply(ctx, p, "Quero remarcar minha consulta")
 			f.must(err)
+
 			name = "find_available_slots"
 			out, err = a.ReplyConversation(ctx, p, out.ConversationID, "Mostre os horários")
 			f.must(err)
+
 			if out.Availability == nil || len(out.Availability.Slots) != 1 ||
 				out.Availability.Slots[0].ID != destination {
 				t.Fatalf("destination search=%+v", out)
 			}
 
 			name, args = "reschedule_appointment", fmt.Sprintf(`{"slot_id":%q}`, destination)
+
 			out, err = a.ReplyConversation(ctx, p, out.ConversationID, "O primeiro")
 			if err != nil || out.PendingAction == nil || out.PendingAction.Category != "consultation" ||
 				!strings.Contains(out.Message, "consulta") {
@@ -53,6 +56,7 @@ func TestConversationalReschedulingPostgres(t *testing.T) {
 
 			rows, err := f.service.ListAppointments(ctx, p, application.AppointmentFilter{})
 			f.must(err)
+
 			if len(rows) != 1 || rows[0].SlotID != original.SlotID || rows[0].Version != 1 {
 				t.Fatalf("preparation changed original: %+v", rows)
 			}
@@ -63,14 +67,17 @@ func TestConversationalReschedulingPostgres(t *testing.T) {
 			}
 
 			name, args = "respond_to_proposal", `{"decision":"confirm"}`
+
 			confirmed, err := a.ReplyConversation(ctx, p, out.ConversationID, "Sim, confirmo a remarcação")
 			if conflict {
 				code(t, err, "SLOT_UNAVAILABLE")
+
 				if confirmed.Message != "" {
 					t.Fatalf("conflict reported success: %+v", confirmed)
 				}
 			} else {
 				f.must(err)
+
 				if len(confirmed.Appointments) != 1 || confirmed.Appointments[0].ID != original.ID {
 					t.Fatalf("rescheduling changed ID: %+v", confirmed)
 				}
@@ -81,6 +88,7 @@ func TestConversationalReschedulingPostgres(t *testing.T) {
 
 			rows, err = f.service.ListAppointments(ctx, p, application.AppointmentFilter{})
 			f.must(err)
+
 			wantSlot, wantVersion := destination, 2
 			if conflict {
 				wantSlot, wantVersion = original.SlotID, 1
