@@ -12,22 +12,22 @@ import (
 	"github.com/ledongthuc/pdf"
 )
 
-func extractDocument(ctx context.Context, source string, input io.Reader) (string, []Chunk, error) {
+func extractDocument(ctx context.Context, source string, input io.Reader, config Chunking) (string, []Chunk, error) {
 	if strings.ToLower(filepath.Ext(source)) != ".pdf" {
 		content, err := extract(source, input)
 		if err != nil {
 			return "", nil, err
 		}
 
-		return content, split(content), nil
+		return content, split(content, config), nil
 	}
 
-	return extractPDF(ctx, input)
+	return extractPDF(ctx, input, config)
 }
 
 // extractPDF handles text PDFs only. Chunk boundaries never cross a physical PDF page.
 // Lines refer to extracted page text; page numbers refer to the original PDF, including blank pages.
-func extractPDF(ctx context.Context, input io.Reader) (content string, chunks []Chunk, err error) {
+func extractPDF(ctx context.Context, input io.Reader, config Chunking) (content string, chunks []Chunk, err error) {
 	defer func() {
 		if recover() != nil {
 			content, chunks, err = "", nil, ErrExtraction
@@ -77,7 +77,7 @@ func extractPDF(ctx context.Context, input io.Reader) (content string, chunks []
 		text = strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\r", "\n")
 		pages = append(pages, text)
 
-		for _, chunk := range split(text) {
+		for _, chunk := range split(text, config) {
 			chunk.Ordinal, chunk.Page = len(chunks)+1, page
 			chunks = append(chunks, chunk)
 		}

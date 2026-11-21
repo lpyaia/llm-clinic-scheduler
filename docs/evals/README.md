@@ -6,6 +6,9 @@ Para avaliar a busca documental com recall@k, acervo controlado e relevância po
 Para groundedness, correção de respostas, citações e abstention em respostas extrativas gravadas, veja
 [Avaliação de respostas RAG](rag-answers.md), com exemplos positivos e negativos determinísticos.
 
+Para comparar chunking e top-k com recuperação e geração, veja
+[Comparação de estratégias RAG](rag-strategies.md), com matriz configurável e índices isolados.
+
 ## Executor reproduzível (#18)
 
 Execute na raiz do repositório, sem PostgreSQL, servidor ou credenciais:

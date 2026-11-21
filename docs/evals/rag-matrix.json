@@ -1,0 +1,18 @@
+{
+  "chunking": [
+    {
+      "strategy": "paragraphs",
+      "max_runes": 600,
+      "overlap": 0
+    },
+    {
+      "strategy": "windows",
+      "max_runes": 300,
+      "overlap": 60
+    }
+  ],
+  "top_k": [
+    1,
+    3
+  ]
+}

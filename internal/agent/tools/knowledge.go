@@ -76,6 +76,12 @@ func (q *knowledgeSearch) Execute(ctx context.Context, _ Input, arguments json.R
 		return ReplyToPatient{Result: knowledgeReply(knowledgeUnavailable)}, nil
 	}
 
+	return AnswerKnowledge(rows, q.schemas.KnowledgeAnswer)
+}
+
+// AnswerKnowledge constructs a scoped, read-only answer from already retrieved excerpts.
+// Its finalizer accepts only these rows and performs no I/O or conversation state changes.
+func AnswerKnowledge(rows []knowledge.Result, schema json.RawMessage) (Outcome, error) {
 	if len(rows) == 0 {
 		return ReplyToPatient{Result: knowledgeReply(knowledgeNotFound)}, nil
 	}
@@ -95,7 +101,7 @@ func (q *knowledgeSearch) Execute(ctx context.Context, _ Input, arguments json.R
 	return ReturnToModel{
 		AnswerOnly:     true,
 		Content:        content,
-		ResponseSchema: contract.ResponseSchema{Name: "knowledge_answer", Schema: q.schemas.KnowledgeAnswer},
+		ResponseSchema: contract.ResponseSchema{Name: "knowledge_answer", Schema: schema},
 		Instructions: `Após search_clinic_knowledge, retorne somente excerpt_ids com os IDs dos trechos
 que sustentam diretamente a resposta à pergunta atual. Selecione somente trechos da última recuperação.
 Não use similaridade como prova de suporte. Se o material não sustentar a resposta, use excerpt_ids: [].
