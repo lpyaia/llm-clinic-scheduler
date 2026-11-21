@@ -41,7 +41,8 @@ type UncertainConfirmation struct {
 	ID uuid.UUID
 }
 
-func (c Conversation) clone() Conversation {
+// Clone gives storage implementations an independent snapshot, including nested values.
+func (c Conversation) Clone() Conversation {
 	c.History = append([]Message(nil), c.History...)
 	for i := range c.History {
 		c.History[i].ToolCalls = append([]ToolCall(nil), c.History[i].ToolCalls...)
@@ -92,10 +93,6 @@ func (f *conversationFlow) rememberExchange(message, reply string) {
 		Message{Role: "user", Content: message},
 		Message{Role: "assistant", Content: reply},
 	)
-	// Keep complete user/assistant pairs; tool transcripts stay request-local.
-	if len(f.state.History) > 20 {
-		f.state.History = f.state.History[len(f.state.History)-20:]
-	}
 }
 
 func (f *conversationFlow) request(message string) (Request, error) {
@@ -154,7 +151,13 @@ func (f *conversationFlow) request(message string) (Request, error) {
 
 	in.Tools = f.availableTools()
 
-	in.Messages = append(in.Messages, f.state.History...)
+	// Persist all exchanges; bound only the model context to ten complete pairs.
+	history := f.state.History
+	if len(history) > 20 {
+		history = history[len(history)-20:]
+	}
+
+	in.Messages = append(in.Messages, history...)
 	in.Messages = append(in.Messages, Message{Role: "user", Content: message})
 
 	return in, nil

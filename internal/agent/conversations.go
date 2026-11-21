@@ -24,8 +24,9 @@ type ConversationStore interface {
 }
 
 // LockedConversation owns exclusive access until Release. Snapshot and Save copy
-// state; local changes never write implicitly. Each successful Save is durable for
-// this process even if later processing fails. Save must reject cancelled contexts.
+// state; local changes never write implicitly. Each successful Save commits independently
+// of later processing; persistent stores must survive process restart. Save must reject
+// cancelled contexts. Release must free access even after cancellation or a failed Save.
 // A newly created conversation with no successful Save is removed on Release.
 type LockedConversation interface {
 	Snapshot() Conversation
@@ -124,7 +125,7 @@ type lockedMemoryConversation struct {
 }
 
 func (l *lockedMemoryConversation) Snapshot() Conversation {
-	return l.entry.state.clone()
+	return l.entry.state.Clone()
 }
 
 func (l *lockedMemoryConversation) Save(ctx context.Context, state Conversation) error {
@@ -132,7 +133,7 @@ func (l *lockedMemoryConversation) Save(ctx context.Context, state Conversation)
 		return err
 	}
 
-	l.entry.state = state.clone()
+	l.entry.state = state.Clone()
 	l.entry.saved = true
 
 	return nil

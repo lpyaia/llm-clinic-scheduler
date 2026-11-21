@@ -1,4 +1,4 @@
-# Fluxos conversacionais de agendamento — tickets #7, #10, #11, #12 e #13
+# Fluxos conversacionais de agendamento — tickets #7, #10, #11, #12, #13 e #26
 
 O paciente autenticado consulta seus agendamentos em português por
 `POST /v1/agent/messages`. A ferramenta `list_appointments` reutiliza
@@ -118,6 +118,39 @@ O servidor usa `EMBEDDING_MODEL` e `EMBEDDING_DIMENSIONS` compatíveis com o ace
    `expanded`. A mensagem também informa o intervalo e a ausência de resultados.
    A busca termina na ferramenta e o servidor monta a resposta. Para iniciar outra
    conversa, omita o ID.
+
+## Retomar após reinício
+
+O servidor usa `ConversationStore` com PostgreSQL; `agent.New` conserva a implementação em memória para testes.
+Execute `go run ./cmd/clinic migrate` para aplicar a migration de conversas antes de iniciar `serve`.
+Guarde o `conversation_id` e reenvie-o com uma sessão válida do mesmo paciente após reiniciar o servidor.
+O histórico completo dos turnos bem-sucedidos, intenção, preferências, seleção, candidatos e referências às ações
+ficam gravados. Somente as dez últimas trocas são enviadas ao modelo; mensagens anteriores continuam persistidas.
+Uma sessão renovada para o mesmo paciente pode retomar a conversa; conhecer um ID alheio continua retornando `404`.
+
+Mensagens e estado estruturado são gravados juntos em uma linha de `conversations`, em colunas JSONB separadas.
+O formato do estado tem versão explícita; versões desconhecidas falham sem substituir o conteúdo.
+O adapter restaura também o intervalo original de busca e os IDs internos do atendimento selecionado para remarcação,
+que não são expostos no JSON enviado ao modelo. O armazenamento não interpreta propostas nem confirma ações.
+
+Um advisory lock de sessão por banco, schema e conversa mantém acesso exclusivo durante o turno inteiro,
+inclusive entre instâncias. Cada `Save` faz commit independente; não há transação aberta durante chamadas ao modelo.
+O pool de conversas tem até 12 conexões, separado das 12 conexões do núcleo para evitar esgotamento circular.
+`Release` libera o lock mesmo após cancelamento; se o desbloqueio falhar, a conexão é descartada.
+Encerrar a conexão/processo também libera o lock no PostgreSQL. Não use pooling em modo de transação para essas
+conexões: a exclusão exige afinidade de sessão durante todo o turno.
+
+O fluxo continua sequenciado por `Agent.ReplyConversation`: adquire acesso, carrega estado, salva a revogação antes
+da interpretação e salva a referência de consulta antes de confirmar no núcleo. O resultado da mutação e da ação
+continuam atômicos na transação do núcleo. Depois, histórico e estado final são salvos antes de retornar sucesso.
+Uma falha de gravação retorna erro, preservando o último checkpoint confirmado. Se a confirmação foi concluída
+mas a gravação final falhou, a próxima mensagem consulta o resultado já persistido, sem repetir a mutação.
+Se a proposta ou o checkpoint anterior à mutação não foi salvo, nenhuma confirmação é executada.
+
+Após reiniciar, “Sim” só pode confirmar a ação apresentada naquela conversa e ainda válida.
+Expiração, conflito de disponibilidade ou alteração do agendamento exigem nova preparação e confirmação.
+Falhas de interpretação deixam a autoridade consumida; reiniciar não restaura uma proposta descartada.
+Histórico de turnos que falharam não é registrado como uma troca bem-sucedida.
 
 ## Conferir a interpretação de datas
 

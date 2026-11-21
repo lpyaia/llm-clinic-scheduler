@@ -304,7 +304,8 @@ domínio verificam também a passagem entre domingo e segunda-feira no fuso da c
 
 Os fluxos da V2 já incluem [consulta, busca, agendamento, remarcação e cancelamento por conversa](docs/agent-local.md).
 `POST /v1/agent/messages` recebe uma mensagem em português e usa a sessão existente.
-Retorne o `conversation_id` recebido para preservar preferências e histórico em memória.
+Retorne o `conversation_id` recebido para retomar preferências e histórico persistidos no PostgreSQL,
+inclusive após reiniciar a aplicação. Aplique as migrations antes de iniciar o servidor.
 Buscas resolvem nomes pelo catálogo, convertem datas relativas no fuso da clínica e
 reutilizam a disponibilidade determinística; nomes ambíguos geram esclarecimento.
 Escolher um horário e categoria prepara uma proposta com resumo e validade, sem reservar.
@@ -333,12 +334,12 @@ As fontes incluem documento, linhas e página de PDF; entidades ambíguas pedem 
 a fonte atual sem manter trechos antigos. Sem suporte, o agente se abstém; falhas de recuperação são informadas
 sem resposta factual. Configure embeddings e importe o [acervo simulado](docs/knowledge/README.md).
 
-1. Agente em português, abstração de LLM, tool calling, loop limitado e estado em memória. Tools reutilizam os casos de
+1. Agente em português, abstração de LLM, tool calling e loop limitado. Tools reutilizam os casos de
    uso; confirmações ficam ligadas ao ID da ação pendente.
 2. Traces, métricas de tokens/latência/custo e avaliações com dataset manual e relógio controlado.
 3. RAG com documentos da clínica, ingestão, embeddings, pgvector, citações e abstention.
 4. Avaliações de recall@k, groundedness, citações, chunking e top-k.
-5. Conversas e mensagens persistidas, com serialização por conversa.
+5. Conversas e mensagens persistidas no PostgreSQL, com serialização por conversa e retomada após reinício.
 6. Adapter WhatsApp com deduplicação de mensagens e domínio independente do canal.
 
 Frontend, WhatsApp e deployment em produção não fazem parte desta entrega.

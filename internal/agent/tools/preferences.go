@@ -31,6 +31,21 @@ func (p SearchPreferences) MarshalJSON() ([]byte, error) {
 	}{p.criteria, p.windowFrom})
 }
 
+// UnmarshalJSON restores both criteria and the original interval after a restart.
+func (p *SearchPreferences) UnmarshalJSON(data []byte) error {
+	var stored struct {
+		searchCriteria
+		WindowFrom time.Time
+	}
+	if err := json.Unmarshal(data, &stored); err != nil {
+		return err
+	}
+
+	p.criteria, p.windowFrom = stored.searchCriteria, stored.WindowFrom
+
+	return nil
+}
+
 // refine applies one tool call atomically. Clarifications retain valid updates;
 // malformed arguments leave preferences unchanged. The conversational flow owns rollback
 // if a later catalog or availability lookup fails.
