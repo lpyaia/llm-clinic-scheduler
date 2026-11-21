@@ -40,6 +40,7 @@ func TestRealCommandIngestsSearchesAndCleansIsolatedCorpus(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "retrieval-test-secret")
 	t.Setenv("RETRIEVAL_EVAL_DATABASE_URL", dsn)
 	dataset, _ := fixtureFiles(t)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -83,6 +84,7 @@ func TestRealCommandIngestsSearchesAndCleansIsolatedCorpus(t *testing.T) {
 				}
 
 				var data []map[string]any
+
 				for index, text := range request.Input {
 					vector := []float32{0, 1, 0}
 					if strings.Contains(strings.ToLower(text), "ramp") {
@@ -98,6 +100,7 @@ func TestRealCommandIngestsSearchesAndCleansIsolatedCorpus(t *testing.T) {
 
 			target, _ := url.Parse(server.URL)
 			client := &http.Client{Transport: redirectTransport{target: target}, Timeout: 5 * time.Second}
+
 			var output, diagnostics bytes.Buffer
 
 			code := run(ctx, []string{"-dataset", dataset, "-mode", "real", "-k", "1", "-dimensions", "3"},

@@ -53,6 +53,7 @@ func TestKnowledgeReingestionReplacesCurrentChunks(t *testing.T) {
 	f := setup(t)
 	ctx := context.Background()
 	cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: "faq-v1", Dimensions: 3}
+
 	service, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -79,6 +80,7 @@ func TestKnowledgeFiltersBeforeRanking(t *testing.T) {
 	f := setup(t)
 	ctx := context.Background()
 	cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: "faq-v1", Dimensions: 3}
+
 	service, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -118,16 +120,19 @@ func TestKnowledgePDFPreservesPageLocations(t *testing.T) {
 	f := setup(t)
 	ctx := context.Background()
 	cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: "faq-v1", Dimensions: 3}
+
 	service, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	const source = "../../../docs/knowledge/preparo-ultrassom-abdominal-simulated.pdf"
+
 	file, err := os.Open(source)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	defer func() { _ = file.Close() }()
 
 	_, err = service.Ingest(ctx, source, file,
@@ -143,9 +148,11 @@ func TestKnowledgePDFPreservesPageLocations(t *testing.T) {
 	}
 
 	found := false
+
 	for _, row := range rows {
 		if strings.Contains(row.Text, "sala de apoio 2") {
 			found = true
+
 			if row.Source != source || row.Page != 2 || row.StartLine < 1 || row.EndLine < row.StartLine {
 				t.Fatalf("lost PDF page or extracted line location: %+v", row)
 			}
@@ -161,6 +168,7 @@ func TestKnowledgeFiltersProcedureAndDoctorAndAsksForMissingContext(t *testing.T
 	f := setup(t)
 	ctx := context.Background()
 	cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: "faq-v1", Dimensions: 3}
+
 	service, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -211,6 +219,7 @@ func TestKnowledgeGeneralPolicyDoesNotRetrieveEntityPolicies(t *testing.T) {
 	f := setup(t)
 	ctx := context.Background()
 	cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: "faq-v1", Dimensions: 3}
+
 	service, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -236,6 +245,7 @@ func TestKnowledgePreparationAsksForDoctorWhenInstructionsDependOnDoctor(t *test
 	f := setup(t)
 	ctx := context.Background()
 	cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: "faq-v1", Dimensions: 3}
+
 	service, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -259,6 +269,7 @@ func TestKnowledgeFailedReplacementPreservesPreviousVersion(t *testing.T) {
 	f := setup(t)
 	ctx := context.Background()
 	cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: "faq-v1", Dimensions: 3}
+
 	service, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -296,6 +307,7 @@ func TestKnowledgeFailedReplacementPreservesPreviousVersion(t *testing.T) {
 	}
 
 	f.must(f.store.db.Exec("DROP TRIGGER reject_replacement ON clinic_document_chunks").Error)
+
 	for range 2 {
 		if _, err := service.Ingest(ctx, "current.md", strings.NewReader("atual"),
 			knowledge.Metadata{Topic: "preparation", Exam: "Exame novo"}); err != nil {
@@ -319,6 +331,7 @@ func TestKnowledgeSimulatedCorpusCanBeIngestedWithItsMetadata(t *testing.T) {
 	f := setup(t)
 	ctx := context.Background()
 	cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: "faq-v1", Dimensions: 3}
+
 	service, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -345,6 +358,7 @@ func TestKnowledgeSimulatedCorpusCanBeIngestedWithItsMetadata(t *testing.T) {
 
 		_, err = service.Ingest(ctx, entry.File, file, entry.Metadata)
 		_ = file.Close()
+
 		if err != nil {
 			t.Fatalf("ingest %s: %v", entry.File, err)
 		}
@@ -377,6 +391,7 @@ func TestKnowledgeSearchRanksAcrossDocuments(t *testing.T) {
 	f := setup(t)
 	ctx := context.Background()
 	cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: "faq-v1", Dimensions: 3}
+
 	service, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -416,6 +431,7 @@ func TestKnowledgeEmptyCorpusReturnsNoResults(t *testing.T) {
 	embedder := embeddingFunc(func(context.Context, knowledge.EmbeddingConfig, []string) ([][]float32, error) {
 		return nil, errors.New("an empty corpus must not request embeddings")
 	})
+
 	service, err := knowledge.New(f.store, embedder, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -431,6 +447,7 @@ func TestKnowledgeRejectsLegacyMixedCorpus(t *testing.T) {
 	f := setup(t)
 	ctx := context.Background()
 	cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: "faq-v1", Dimensions: 3}
+
 	service, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -466,6 +483,7 @@ func TestKnowledgeRejectsLegacyMixedCorpus(t *testing.T) {
 
 func TestKnowledgeConcurrentFirstImportsKeepOneConfiguration(t *testing.T) {
 	f := setup(t)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -490,8 +508,10 @@ func TestKnowledgeConcurrentFirstImportsKeepOneConfiguration(t *testing.T) {
 	}
 
 	completed := make(chan outcome, 2)
+
 	for _, model := range []string{"faq-v1", "faq-v2"} {
 		cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: model, Dimensions: 3}
+
 		service, err := knowledge.New(f.store, embedder, cfg)
 		if err != nil {
 			t.Fatal(err)
@@ -514,8 +534,10 @@ func TestKnowledgeConcurrentFirstImportsKeepOneConfiguration(t *testing.T) {
 
 	close(release)
 
-	var winner knowledge.Document
-	var successful, incompatible int
+	var (
+		winner                   knowledge.Document
+		successful, incompatible int
+	)
 
 	for range 2 {
 		result := <-completed
@@ -548,6 +570,7 @@ func TestKnowledgeConcurrentFirstImportsKeepOneConfiguration(t *testing.T) {
 func TestKnowledgeChunkWriteFailureRollsBackWholeDocument(t *testing.T) {
 	f := setup(t)
 	cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: "faq-v1", Dimensions: 3}
+
 	service, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -581,7 +604,9 @@ func TestKnowledgeChunkWriteFailureRollsBackWholeDocument(t *testing.T) {
 
 	// A different model can establish the still-empty corpus after the failed transaction.
 	f.must(f.store.db.Exec("DROP TRIGGER reject_second_chunk ON clinic_document_chunks").Error)
+
 	cfg.Model = "faq-v2"
+
 	retry, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -595,6 +620,7 @@ func TestKnowledgeChunkWriteFailureRollsBackWholeDocument(t *testing.T) {
 func TestKnowledgeRejectsUnreadableAndEmptyDocuments(t *testing.T) {
 	f := setup(t)
 	cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: "faq-v1", Dimensions: 3}
+
 	service, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -625,6 +651,7 @@ func TestKnowledgeRejectsUnreadableAndEmptyDocuments(t *testing.T) {
 func TestKnowledgeRejectsInvalidEmbeddings(t *testing.T) {
 	f := setup(t)
 	cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: "faq-v1", Dimensions: 3}
+
 	working, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -651,6 +678,7 @@ func TestKnowledgeRejectsInvalidEmbeddings(t *testing.T) {
 			embedder := embeddingFunc(func(context.Context, knowledge.EmbeddingConfig, []string) ([][]float32, error) {
 				return test.vectors, test.err
 			})
+
 			service, err := knowledge.New(f.store, embedder, cfg)
 			if err != nil {
 				t.Fatal(err)
@@ -684,6 +712,7 @@ func TestKnowledgeRejectsIncompatibleSearchAndConfiguration(t *testing.T) {
 	f := setup(t)
 	ctx := context.Background()
 	cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: "faq-v1", Dimensions: 3}
+
 	service, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -739,12 +768,14 @@ func TestKnowledgeRejectsIncompatibleSearchAndConfiguration(t *testing.T) {
 func TestKnowledgePreservesLongUnicodeLinesAndCRLFCitations(t *testing.T) {
 	f := setup(t)
 	cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: "faq-v1", Dimensions: 3}
+
 	service, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	content := "\ufeff\r\n" + strings.Repeat("á", 1005) + "\r\nfinal\r\n"
+
 	_, err = service.Ingest(context.Background(), "faq.txt", strings.NewReader(content))
 	if err != nil {
 		t.Fatal(err)
@@ -765,6 +796,7 @@ func TestKnowledgePreservesLongUnicodeLinesAndCRLFCitations(t *testing.T) {
 func TestKnowledgeHandlesWhitespaceAtChunkBoundary(t *testing.T) {
 	f := setup(t)
 	cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: "faq-v1", Dimensions: 3}
+
 	service, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -785,6 +817,7 @@ func TestKnowledgeHandlesWhitespaceAtChunkBoundary(t *testing.T) {
 func TestKnowledgeCancelledPersistencePreservesExistingDocument(t *testing.T) {
 	f := setup(t)
 	cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: "faq-v1", Dimensions: 3}
+
 	service, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -802,10 +835,12 @@ func TestKnowledgeCancelledPersistencePreservesExistingDocument(t *testing.T) {
 		ctx context.Context, cfg knowledge.EmbeddingConfig, texts []string,
 	) ([][]float32, error) {
 		vectors, err := (controlledEmbeddings{}).Embed(ctx, cfg, texts)
+
 		cancel()
 
 		return vectors, err
 	})
+
 	cancelled, err := knowledge.New(f.store, embedder, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -826,12 +861,14 @@ func TestKnowledgeIngestionAndRankedCitations(t *testing.T) {
 	f := setup(t)
 	ctx := context.Background()
 	cfg := knowledge.EmbeddingConfig{Provider: "controlled", Model: "faq-v1", Dimensions: 3}
+
 	service, err := knowledge.New(f.store, controlledEmbeddings{}, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	const faq = "# FAQ simulada\n\nO estacionamento é gratuito.\n\nHá ônibus na porta.\n\nAtendemos das 8h às 18h.\n"
+
 	doc, err := service.Ingest(ctx, "faq.md", strings.NewReader(faq))
 	if err != nil {
 		t.Fatal(err)
