@@ -243,7 +243,8 @@ citações do histórico nunca são aceitas como evidência de uma nova recupera
 Importe os FAQs acima e inicie `go run ./cmd/clinic serve`. O servidor usa `EMBEDDING_MODEL` e
 `EMBEDDING_DIMENSIONS` com os mesmos padrões do comando de ingestão; mantenha a configuração compatível com o acervo.
 Na sessão autenticada descrita em [agent-local.md](../agent-local.md), envie estas mensagens a
-`POST /v1/agent/messages`, preservando o `conversation_id`:
+`POST /v1/agent/messages`, com um novo `message_id` UUID por mensagem,
+preservando o `conversation_id` e enviando `conversation_revision` da última resposta:
 
 | Mensagem | Resultado esperado |
 | --- | --- |

@@ -136,18 +136,38 @@ func (a *Agent) Reply(ctx context.Context, principal domain.Principal, message s
 // ReplyConversation uses only the authenticated principal to access conversation state.
 // It rejects concurrent turns before interpretation and holds exclusive access
 // through model and core execution. Authority is consumed durably before the model.
+// This compatibility entry point serves existing direct callers and evaluations;
+// channel adapters use ReplyMessage for stable identity and serialized waiting.
 func (a *Agent) ReplyConversation(
 	ctx context.Context,
 	principal domain.Principal,
 	id uuid.UUID,
 	message string,
 ) (result Result, resultErr error) {
+	return a.replyConversation(ctx, principal, id, message, nil)
+}
+
+func (a *Agent) replyConversation(
+	ctx context.Context, principal domain.Principal, id uuid.UUID, message string, input *MessageInput,
+) (result Result, resultErr error) {
 	run := a.Traces.Start(ctx, message)
+
+	messageID := uuid.Nil
+	if input != nil {
+		messageID = input.ID
+	}
 
 	defer func() {
 		if value := recover(); value != nil {
 			run.Finish(nil, errors.New("agent execution interrupted"))
 			panic(value)
+		}
+
+		if input != nil {
+			var failure *TurnError
+			if errors.As(resultErr, &failure) {
+				failure.MessageID = input.ID
+			}
 		}
 
 		run.Finish(result, resultErr)
@@ -163,18 +183,21 @@ func (a *Agent) ReplyConversation(
 		return Result{}, domain.Failure("INVALID_INPUT", "Informe uma mensagem de até 4000 bytes.")
 	}
 
-	if a.model == nil {
+	if a.model == nil && input == nil {
 		return Result{}, domain.Failure("AGENT_UNAVAILABLE", "O assistente não está configurado.")
 	}
 
 	createConversation := id == uuid.Nil
 	if createConversation {
 		id = uuid.New()
+		if input != nil {
+			id = uuid.NewSHA1(principal.PatientID, input.ID[:])
+		}
 	}
 
 	run.SetConversationID(id)
 
-	access := ConversationAccess{CreateConversation: createConversation, Wait: false}
+	access := ConversationAccess{CreateConversation: createConversation, Wait: input != nil}
 
 	acquireStep := run.StartStep(trace.Step{Kind: "conversation.acquire"}, nil)
 	locked, err := a.conversations.Acquire(ctx, principal.PatientID, id, access)
@@ -201,7 +224,42 @@ func (a *Agent) ReplyConversation(
 		core: a.core, principal: principal, state: locked.Snapshot(), clinicContact: a.ClinicContact,
 		knowledge: a.Knowledge,
 	}
-	if createConversation {
+	if input != nil {
+		if record := flow.state.message(input.ID); record != nil && record.Text != message {
+			return Result{}, domain.Failure("INVALID_INPUT", "Este ID já identifica outra mensagem.")
+		}
+	}
+
+	if err := flow.recoverMessages(ctx, locked, id); err != nil {
+		return Result{}, turnFailure(id, err)
+	}
+
+	if input != nil {
+		if record := flow.state.message(input.ID); record != nil {
+			if record.Status == MessageCompleted && record.Result != nil {
+				return cloneMessageResult(*record.Result), nil
+			}
+
+			if record.Status == MessageFailed && record.Failure != nil {
+				return Result{}, &TurnError{ConversationID: id, failure: record.Failure, cause: record.Failure}
+			}
+
+			return Result{}, domain.Failure("INTERNAL_ERROR", "Estado da mensagem indisponível.")
+		}
+
+		if a.model == nil {
+			return Result{}, domain.Failure("AGENT_UNAVAILABLE", "O assistente não está configurado.")
+		}
+
+		flow.state.Messages = append(flow.state.Messages, MessageRecord{
+			ID: input.ID, Text: message, Status: MessageProcessing,
+		})
+		if input.Revision == flow.state.Revision {
+			flow.bindProposal()
+		}
+	}
+
+	if createConversation || input != nil {
 		if err := locked.Save(ctx, flow.state); err != nil {
 			return Result{}, err
 		}
@@ -213,7 +271,7 @@ func (a *Agent) ReplyConversation(
 		recoveryStep.End(out, err)
 
 		if err == nil {
-			flow.rememberExchange(message, out.Message)
+			out = flow.completeExchange(id, messageID, message, out)
 		}
 
 		if flow.state.Uncertain == nil {
@@ -226,12 +284,10 @@ func (a *Agent) ReplyConversation(
 			return Result{}, turnFailure(id, err)
 		}
 
-		out.ConversationID = id
-
 		return out, nil
 	}
 
-	if flow.bindProposal() {
+	if input == nil && flow.bindProposal() {
 		if err := locked.Save(ctx, flow.state); err != nil {
 			return Result{}, turnFailure(id, err)
 		}
@@ -252,8 +308,7 @@ func (a *Agent) ReplyConversation(
 		return Result{}, failTurn(ctx, locked, id, err)
 	}
 
-	out.ConversationID = id
-	flow.rememberExchange(message, out.Message)
+	out = flow.completeExchange(id, messageID, message, out)
 
 	if err := locked.Save(ctx, flow.state); err != nil {
 		return Result{}, turnFailure(id, err)

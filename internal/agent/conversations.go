@@ -18,7 +18,9 @@ type ConversationAccess struct {
 }
 
 // ConversationStore enforces ownership and grants exclusive access. Unknown IDs
-// cannot be opened without CreateConversation. Waiting must honor cancellation.
+// cannot be opened without CreateConversation, which permits creating a missing
+// conversation or resuming an existing one owned by the same patient.
+// Waiting must honor cancellation. Turns are ordered by exclusive access acquisition.
 type ConversationStore interface {
 	Acquire(context.Context, uuid.UUID, uuid.UUID, ConversationAccess) (LockedConversation, error)
 }
@@ -61,8 +63,9 @@ func (m *MemoryConversations) Acquire(
 
 	m.mu.Lock()
 	entry, exists := m.entries[id]
+	created := access.CreateConversation && !exists
 
-	if access.CreateConversation && !exists {
+	if created {
 		entry = &memoryConversation{patientID: patientID, gate: make(chan struct{}, 1)}
 		// Acquire before publishing so follow-ups cannot precede creation.
 		entry.gate <- struct{}{}
@@ -71,11 +74,11 @@ func (m *MemoryConversations) Acquire(
 	}
 	m.mu.Unlock()
 
-	if entry == nil || entry.patientID != patientID || (exists && access.CreateConversation) {
+	if entry == nil || entry.patientID != patientID {
 		return nil, domain.ErrNotFound
 	}
 
-	if !access.CreateConversation {
+	if !created {
 		if err := entry.acquire(ctx, access.Wait); err != nil {
 			return nil, err
 		}

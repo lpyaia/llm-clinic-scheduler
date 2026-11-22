@@ -18,6 +18,11 @@ paths:
       description: >-
         Resolve o paciente pela sessão. Sem conversation_id, inicia uma conversa;
         repita o ID retornado para preservar histórico e preferências de busca.
+        message_id é um UUID obrigatório gerado pelo cliente e reutilizado em retries da mesma mensagem.
+        O ID é único dentro da conversa do paciente; outro texto com o mesmo ID retorna INVALID_INPUT (400).
+        Repetir a primeira mensagem sem conversation_id também recupera a mesma conversa e resultado.
+        conversation_revision é a revisão da última resposta recebida; omissão usa zero.
+        Somente uma revisão correspondente à proposta atual permite confirmá-la.
         Conversas pertencem ao paciente autenticado e persistem no PostgreSQL após migrations explícitas.
         Histórico, preferências, seleção e referência à proposta sobrevivem ao reinício.
         IDs desconhecidos ou de outro paciente retornam 404, inclusive durante outro turno.
@@ -51,12 +56,17 @@ paths:
         alterações exigem novo resumo e confirmação. Repetir a confirmação é idempotente.
         Remarcar e cancelar também exigem resumo e mensagem posterior de confirmação;
         o resultado e o status apresentados vêm do núcleo. Repetir não altera outro atendimento.
-        Toda mensagem durante outra em execução retorna INVALID_INPUT (400), antes da interpretação;
-        aguarde a resposta, leia o resumo e reenvie a mensagem.
+        Mensagens identificadas aguardam o lock PostgreSQL da conversa, respeitando o timeout da requisição.
+        A ordem de aquisição do lock define a ordem de processamento; não há garantia de ordem de chegada HTTP.
+        A mensagem é aceita ao salvar seu registro processing sob o lock; cancelamento durante espera não aceita nada.
+        Resultado e estado completed ou failed são salvos com o contexto; replay não chama modelo nem tools.
+        Uma mensagem interrompida sem ação incerta retorna MESSAGE_INTERRUPTED (409) e exige outro message_id.
+        Um resultado de confirmação incerto é consultado pela ação existente antes de aceitar outra mensagem.
+        Confirmação aguardando não adquire autoridade de uma proposta preparada ou substituída durante a espera.
         Expiração revoga a referência e retorna ACTION_EXPIRED (410), exigindo nova preparação.
         Reenvios usam a referência concluída e retornam o mesmo agendamento, mesmo após a validade original.
         Revogar autoridade nunca cancela agendamento concluído. Falhas retornam orientação em português
-        e error.conversation_id quando o turno já possui estado salvo. Reutilize esse ID para retomar.
+        e error.conversation_id e error.message_id quando o turno possui contexto para retomada.
         Antes de confirmar, o fluxo salva uma referência de consulta. Se houver resultado incerto,
         a próxima mensagem consulta a ação antes de interpretar outro pedido, sem repetir a mutação.
         Falha ao salvar estado não retorna resposta de sucesso; checkpoints anteriores permanecem gravados.
@@ -70,8 +80,17 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [message]
+              required: [message_id, message]
               properties:
+                message_id:
+                  type: string
+                  format: uuid
+                  description: UUID estável desta mensagem. Reutilize em retries; outra mensagem exige outro UUID.
+                conversation_revision:
+                  type: integer
+                  minimum: 0
+                  default: 0
+                  description: Revisão da última resposta recebida, necessária para responder à proposta apresentada.
                 conversation_id:
                   type: string
                   format: uuid
@@ -368,6 +387,10 @@ components:
               type: string
               format: uuid
               description: Conversa salva para retomar após falha no processamento do turno.
+            message_id:
+              type: string
+              format: uuid
+              description: ID da mensagem identificada. Repita o mesmo ID e texto para consultar seu resultado.
     Patient:
       type: object
       required: [id, full_name, phone]
@@ -438,9 +461,14 @@ components:
         version: { type: integer, minimum: 1 }
     AgentReply:
       type: object
-      required: [conversation_id, message, appointments]
+      required: [conversation_id, message_id, conversation_revision, message, appointments]
       properties:
         conversation_id: { type: string, format: uuid }
+        message_id: { type: string, format: uuid }
+        conversation_revision:
+          type: integer
+          minimum: 0
+          description: Revisão desta resposta. Envie-a na mensagem posterior à leitura da proposta.
         message: { type: string }
         pending_action:
           type: object

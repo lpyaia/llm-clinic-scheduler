@@ -1,6 +1,6 @@
 # Investigar uma execução por trace — #16
 
-Cada turno de `Agent.Reply` ou `Agent.ReplyConversation` produz uma execução independente, com `trace_id`,
+Cada turno de `Agent.ReplyMessage`, `Agent.Reply` ou `Agent.ReplyConversation` produz uma execução, com `trace_id`,
 `request_id` e `conversation_id`. O `request_id` corresponde ao header HTTP `X-Request-ID` e ao log `http_request`.
 Mensagens posteriores mantêm a conversa e recebem novos IDs de execução e requisição.
 Chamadas diretas ao agente recebem um `request_id` gerado quando o contexto não fornece um UUID válido.
@@ -26,7 +26,8 @@ Chamadas diretas ao agente recebem um `request_id` gerado quando o contexto não
 3. Em outro terminal, usando `$base` e `$headers` do roteiro local, envie uma consulta:
 
    ```powershell
-   $body = @{ message = 'Quais atendimentos tenho marcados?' } | ConvertTo-Json
+   $body = @{ message_id = [guid]::NewGuid().ToString(); message = 'Quais atendimentos tenho marcados?' }
+   $body = $body | ConvertTo-Json
    $response = Invoke-WebRequest "$base/v1/agent/messages" -Method Post -Headers $headers `
      -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($body))
    $requestId = [string]$response.Headers['X-Request-ID']

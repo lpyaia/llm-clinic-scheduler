@@ -304,8 +304,10 @@ domínio verificam também a passagem entre domingo e segunda-feira no fuso da c
 
 Os fluxos da V2 já incluem [consulta, busca, agendamento, remarcação e cancelamento por conversa](docs/agent-local.md).
 `POST /v1/agent/messages` recebe uma mensagem em português e usa a sessão existente.
+Cada envio exige `message_id` (UUID gerado pelo cliente); retries preservam o ID e o texto.
 Retorne o `conversation_id` recebido para retomar preferências e histórico persistidos no PostgreSQL,
 inclusive após reiniciar a aplicação. Aplique as migrations antes de iniciar o servidor.
+Envie também `conversation_revision` da última resposta para responder à proposta efetivamente recebida.
 Buscas resolvem nomes pelo catálogo, convertem datas relativas no fuso da clínica e
 reutilizam a disponibilidade determinística; nomes ambíguos geram esclarecimento.
 Escolher um horário e categoria prepara uma proposta com resumo e validade, sem reservar.
@@ -315,8 +317,9 @@ Uma confirmação explícita posterior, como “sim, confirmo”, executa apenas
 daquela conversa e paciente; o modelo interpreta a mensagem atual no contexto da proposta,
 sem listas fixas de frases. Repetir a confirmação retorna o mesmo agendamento. Perguntas,
 condições, recusas, alterações e falhas de interpretação revogam a autoridade anterior.
-Toda mensagem concorrente é rejeitada antes da interpretação; aguarde a resposta para reenviar.
-Veja a [decisão e política de falhas](docs/adr/0001-contextual-proposal-responses.md).
+Mensagens identificadas aguardam acesso exclusivo no PostgreSQL, em ordem de aquisição do lock.
+Resultados são persistidos por ID; retries não reexecutam ferramentas. Uma revisão antiga não confirma proposta nova.
+Veja a [decisão sobre mensagens identificadas e recuperação](docs/adr/0002-identified-conversation-messages.md).
 O adapter OpenAI é opcional: configure `OPENAI_API_KEY` para habilitá-lo e
 `OPENAI_MODEL` para escolher um modelo compatível com Chat Completions, tools e
 Structured Outputs (padrão `gpt-4.1-mini`). Sem chave, apenas essa rota retorna

@@ -188,7 +188,8 @@ mas não mede se um modelo real escolhe a ferramenta correta. Não há classific
 
 1. Execute o roteiro de [agent-local.md](../agent-local.md) com dados fictícios, banco sem agendamentos do
    paciente e o catálogo de seed. Configure `CLINIC_CONTACT` com um contato de teste conhecido.
-2. Envie cada `message` para `POST /v1/agent/messages`, com sessão autenticada e sem `conversation_id`,
+2. Envie cada `message` para `POST /v1/agent/messages`, com sessão autenticada,
+   um novo `message_id` UUID por mensagem e sem `conversation_id`,
    para avaliar os casos isoladamente. Registre `id`, versão do modelo, configuração e resposta.
 3. Quando houver captura de chamadas ao modelo, compare a primeira ferramenta com `tool` e os argumentos
    relevantes com `arguments`. Campos opcionais nulos ou normalização de nomes não mudam a intenção esperada.

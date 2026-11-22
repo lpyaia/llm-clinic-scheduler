@@ -28,6 +28,7 @@ type Conversation struct {
 	Revision     uint64
 	Rescheduling *contract.Rescheduling
 	Candidates   []Appointment
+	Messages     []MessageRecord
 }
 
 // CompletedAction retains only the core's idempotency reference, never a proposal.
@@ -43,6 +44,19 @@ type UncertainConfirmation struct {
 
 // Clone gives storage implementations an independent snapshot, including nested values.
 func (c Conversation) Clone() Conversation {
+	c.Messages = append([]MessageRecord(nil), c.Messages...)
+	for i := range c.Messages {
+		if c.Messages[i].Result != nil {
+			result := cloneMessageResult(*c.Messages[i].Result)
+			c.Messages[i].Result = &result
+		}
+
+		if c.Messages[i].Failure != nil {
+			failure := *c.Messages[i].Failure
+			c.Messages[i].Failure = &failure
+		}
+	}
+
 	c.History = append([]Message(nil), c.History...)
 	for i := range c.History {
 		c.History[i].ToolCalls = append([]ToolCall(nil), c.History[i].ToolCalls...)

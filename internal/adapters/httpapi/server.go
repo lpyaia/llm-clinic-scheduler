@@ -83,6 +83,9 @@ func New(
 			var turn *agent.TurnError
 			if errors.As(err, &turn) {
 				detail.ConversationID = turn.ConversationID.String()
+				if turn.MessageID != uuid.Nil {
+					detail.MessageID = turn.MessageID.String()
+				}
 			}
 
 			return c.Status(status).JSON(errorDTO{Error: detail})
@@ -185,9 +188,16 @@ func New(
 	v1.Post("/agent/messages", func(c fiber.Ctx) error {
 		var in struct {
 			Message        string          `json:"message"`
+			MessageID      string          `json:"message_id"`
+			Revision       uint64          `json:"conversation_revision"`
 			ConversationID json.RawMessage `json:"conversation_id"`
 		}
 		if err := decode(c, &in); err != nil {
+			return err
+		}
+
+		messageID, err := requiredID(in.MessageID)
+		if err != nil {
 			return err
 		}
 
@@ -211,7 +221,9 @@ func New(
 			return domain.Failure("AGENT_UNAVAILABLE", "O assistente não está configurado.")
 		}
 
-		out, err := assistant.ReplyConversation(c.Context(), principal(c), id, in.Message)
+		out, err := assistant.ReplyMessage(c.Context(), principal(c), agent.MessageInput{
+			ID: messageID, ConversationID: id, Revision: in.Revision, Text: in.Message,
+		})
 		if err != nil {
 			return err
 		}
