@@ -179,16 +179,17 @@ func (a *Agent) replyConversation(
 		return Result{}, domain.ErrUnauthorized
 	}
 
-	if message == "" || len(message) > 4000 {
-		return Result{}, domain.Failure("INVALID_INPUT", "Informe uma mensagem de até 4000 bytes.")
+	if message == "" || len(message) > MaxMessageBytes {
+		return Result{}, domain.Failure("INVALID_INPUT", fmt.Sprintf("Informe uma mensagem de até %d bytes.",
+			MaxMessageBytes))
 	}
 
 	if a.model == nil && input == nil {
 		return Result{}, domain.Failure("AGENT_UNAVAILABLE", "O assistente não está configurado.")
 	}
 
-	createConversation := id == uuid.Nil
-	if createConversation {
+	createConversation := id == uuid.Nil || (input != nil && input.CreateConversation)
+	if id == uuid.Nil {
 		id = uuid.New()
 		if input != nil {
 			id = uuid.NewSHA1(principal.PatientID, input.ID[:])
@@ -241,7 +242,9 @@ func (a *Agent) replyConversation(
 			}
 
 			if record.Status == MessageFailed && record.Failure != nil {
-				return Result{}, &TurnError{ConversationID: id, failure: record.Failure, cause: record.Failure}
+				return Result{}, &TurnError{
+					ConversationID: id, failure: record.Failure, cause: record.Failure, messageSaved: true,
+				}
 			}
 
 			return Result{}, domain.Failure("INTERNAL_ERROR", "Estado da mensagem indisponível.")
