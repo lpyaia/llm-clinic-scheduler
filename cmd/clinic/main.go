@@ -147,12 +147,19 @@ func run(logger *slog.Logger) error {
 			assistant.Traces = trace.NewJSONL(file, trace.Options{
 				Pricing:                 pricing,
 				CaptureSyntheticContent: os.Getenv("CLINIC_TRACE_SYNTHETIC") == "true",
-				Secrets:                 []string{key, os.Getenv("DATABASE_URL"), os.Getenv("TEST_DATABASE_URL")},
+				Secrets: []string{
+					key, os.Getenv("DATABASE_URL"), os.Getenv("TEST_DATABASE_URL"),
+					os.Getenv("WHATSAPP_META_VERIFY_TOKEN"), os.Getenv("WHATSAPP_META_APP_SECRET"),
+					os.Getenv("WHATSAPP_META_ACCESS_TOKEN"),
+				},
 			})
 		}
 	}
 
 	app := httpapi.New(service, store.Ping, logger, timeoutConfig.HTTPRequest, assistant)
+	if err := registerWhatsApp(app, store, assistant); err != nil {
+		return err
+	}
 
 	stopped := make(chan struct{})
 

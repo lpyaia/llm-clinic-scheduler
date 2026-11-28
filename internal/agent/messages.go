@@ -7,14 +7,19 @@ import (
 	"github.com/lpyaia/llm-clinic-scheduler/internal/domain"
 )
 
+const MaxMessageBytes = 4000
+
 // MessageInput identifies a delivery within a patient's conversation. Revision is
 // the conversation_revision returned with the proposal the patient actually saw.
 // It is required to grant proposal authority, never inferred after waiting.
 type MessageInput struct {
 	ID             uuid.UUID
 	ConversationID uuid.UUID
-	Revision       uint64
-	Text           string
+	// CreateConversation lets a trusted adapter open its stable ConversationID
+	// on first contact. Ownership checks and locking apply on every delivery.
+	CreateConversation bool
+	Revision           uint64
+	Text               string
 }
 
 const (

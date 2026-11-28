@@ -14,6 +14,7 @@ linguagem e chamará os mesmos casos de uso.
 - [Contrato OpenAPI](api/openapi.yaml): especificação da API REST da fase 1.
 - [Avaliações do agente](docs/evals/README.md): cenários em português, reprodução determinística e modo real explícito.
 - [Documentos da clínica](docs/knowledge/README.md): FAQ simulado, ingestão e busca local com pgvector e citações.
+- [WhatsApp para paciente cadastrado](docs/whatsapp-local.md) com roteiro de demonstração no WhatsApp Cloud API.
 - [Swagger UI local](http://127.0.0.1:3000/docs): documentação interativa com execução de requisições.
 
 ## Executar localmente
@@ -343,9 +344,9 @@ sem resposta factual. Configure embeddings e importe o [acervo simulado](docs/kn
 3. RAG com documentos da clínica, ingestão, embeddings, pgvector, citações e abstention.
 4. Avaliações de recall@k, groundedness, citações, chunking e top-k.
 5. Conversas e mensagens persistidas no PostgreSQL, com serialização por conversa e retomada após reinício.
-6. Adapter WhatsApp com deduplicação de mensagens e domínio independente do canal.
+6. WhatsApp Cloud API para pacientes cadastrados, com retomada da conversa e deduplicação de turnos no PostgreSQL.
 
-Frontend, WhatsApp e deployment em produção não fazem parte desta entrega.
+Frontend e deployment em produção são etapas futuras.
 
 O [roteiro de traces e métricas](docs/tracing.md) mostra como inspecionar latência, chamadas, tokens e falhas
 por execução. `CLINIC_MODEL_PRICES_FILE` configura a tabela de preços por fornecedor/modelo para estimar custos,

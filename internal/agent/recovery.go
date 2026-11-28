@@ -15,10 +15,21 @@ type TurnError struct {
 	MessageID      uuid.UUID
 	failure        *domain.Error
 	cause          error
+	messageSaved   bool
 }
 
 func (e *TurnError) Error() string   { return e.failure.Error() }
 func (e *TurnError) Unwrap() []error { return []error{e.failure, e.cause} }
+
+// SavedFailureMessage returns patient-facing guidance for a terminal identified message.
+// Adapters can send it safely because retrying the message replays the same stored failure.
+func (e *TurnError) SavedFailureMessage() (string, bool) {
+	if !e.messageSaved {
+		return "", false
+	}
+
+	return e.failure.Message, true
+}
 
 func turnFailure(id uuid.UUID, err error) *TurnError {
 	code := domain.ErrorCode(err)
@@ -62,12 +73,15 @@ func turnFailure(id uuid.UUID, err error) *TurnError {
 func failTurn(ctx context.Context, locked LockedConversation, id uuid.UUID, err error) error {
 	state := locked.Snapshot()
 	changed := state.discardFailedProposal(domain.ErrorCode(err))
+	failure := turnFailure(id, err)
+
 	if state.Uncertain == nil {
 		for i := range state.Messages {
 			record := &state.Messages[i]
 			if record.Status == MessageProcessing {
 				record.Status = MessageFailed
-				record.Failure = turnFailure(id, err).failure
+				record.Failure = failure.failure
+				failure.messageSaved = true
 				changed = true
 			}
 		}
@@ -75,11 +89,11 @@ func failTurn(ctx context.Context, locked LockedConversation, id uuid.UUID, err 
 
 	if changed {
 		if saveErr := locked.Save(ctx, state); saveErr != nil {
-			err = errors.Join(err, saveErr)
+			return turnFailure(id, errors.Join(err, saveErr))
 		}
 	}
 
-	return turnFailure(id, err)
+	return failure
 }
 
 func (c *Conversation) discardFailedProposal(code string) bool {
